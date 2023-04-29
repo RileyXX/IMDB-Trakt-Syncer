@@ -36,11 +36,11 @@ for item in json_data:
     if item['type'] == 'movie':
         movie = item['movie']
         movie_id = movie['ids']['imdb']
-        movie_ratings.append({'Title': movie['title'], 'Year': movie['year'], 'Rating': item['rating'], 'ID': movie_id})
+        movie_ratings.append({'Title': movie['title'], 'Year': movie['year'], 'Rating': item['rating'], 'ID': movie_id, 'Type': 'movie'})
     elif item['type'] == 'show':
         show = item['show']
         show_id = show['ids']['imdb']
-        show_ratings.append({'Title': show['title'], 'Year': show['year'], 'Rating': item['rating'], 'ID': show_id})
+        show_ratings.append({'Title': show['title'], 'Year': show['year'], 'Rating': item['rating'], 'ID': show_id, 'Type': 'show'})
 
 trakt_ratings = movie_ratings + show_ratings
 
