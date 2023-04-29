@@ -31,7 +31,7 @@ This script will sync user ratings for Movies and TV Shows both ways between Tra
 ![Demo](https://i.imgur.com/uydTDcg.png)
 
 
-## Donations, Sponsorships and Custom Projects:
+## Sponsorships, Donations and Custom Projects:
 Like my scripts? Become a [sponsor](https://github.com/sponsors/RileyXX) and support my projects! See below for other donation options. Need help with a project? Open an issue and I will try my best to help! For other inquiries and custom projects contact me on [Twitter](https://twitter.com/RileyxBell).
 
 #### More donation options:
