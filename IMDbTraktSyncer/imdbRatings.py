@@ -86,7 +86,11 @@ try:
             year = row[8]
             rating = row[1]
             imdb_id = row[0]
-            imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id})
+            if "tv" in row[5]:
+                type = "show"
+            else:
+                type = "movie"
+            imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id, 'Type': type})
 except FileNotFoundError:
     print('Ratings file not found')
     
