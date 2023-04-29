@@ -17,7 +17,7 @@ This script will sync user ratings for Movies and TV Shows both ways between Tra
 `python -m pip uninstall IMDbTraktSyncer` in command line.
 
 ## Alternative manual install method:
-1. Download the latest .zip from the releases page and move it to the file directory of your choice.
+1. Download the latest .zip from the [releases page0(https://github.com/RileyXX/IMDb-Trakt-Syncer/releases) and move it to the file directory of your choice.
 2. Run the IMDbTraktSyncer.py. Follow the prompts on first run. It will ask you to fill in your Trakt client id and client secret from step 3. It will also ask you to enter your IMDb username and password. Please note that these details are saved insecurely as credentials.txt in the same folder as the script. Recommended to change your password to something unique beforehand.
 3. Done. The script will continue to run and sync your ratings. This may take some time, you can follow its progress in the command line.
 
