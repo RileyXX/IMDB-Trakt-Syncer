@@ -3,10 +3,10 @@ import json
 import subprocess
 import requests
 import time
-from . import checkChromedriver
-from . import verifyCredentials
-from . import traktRatings
-from . import imdbRatings
+import checkChromedriver
+import verifyCredentials
+import traktRatings
+import imdbRatings
 from chromedriver_py import binary_path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
