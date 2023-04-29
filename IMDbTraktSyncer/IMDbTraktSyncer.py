@@ -74,16 +74,14 @@ def main():
         
     print('Setting IMDB Ratings')
         
-    trakt_ratings = traktRatings.trakt_ratings
-    imdb_ratings = imdbRatings.imdb_ratings
-    trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None] #filter out items without imdb id
-    imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None] #filter out items without imdb id
+    trakt_ratings = [rating for rating in traktRatings.trakt_ratings if rating['ID'] is not None]
+    imdb_ratings = [rating for rating in imdbRatings.imdb_ratings if rating['ID'] is not None]
     imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
     trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
 
     # loop through each movie and TV show rating and submit rating on IMDb website
-    for item in imdb_ratings_to_set:
-        print(f'{item["Title"]} ({item["Year"]}): {item["Rating"]}/10 (IMDb ID: {item["ID"]})')
+    for i, item in enumerate(imdb_ratings_to_set, 1):
+        print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]} ({item["Year"]}): {item["Rating"]}/10 on IMDb')
         driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
         time.sleep(2)
 
@@ -116,10 +114,15 @@ def main():
         "trakt-api-key": trakt_client_id,
         "Authorization": f"Bearer {trakt_access_token}"
     }
+    
+    # Count the total number of items to rate
+    num_items = len(trakt_ratings_to_set)
+    item_count = 0
             
     # Loop through your data table and rate each item on Trakt
     for item in trakt_ratings_to_set:
-        if "ID" in item:
+        item_count += 1
+        if item["Type"] == "show":
             # This is a TV show
             data = {
                 "shows": [{
@@ -129,8 +132,8 @@ def main():
                     "rating": item["Rating"]
                 }]
             }
-            print(f"Rating TV show {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
-        else:
+            print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
+        elif item["Type"] == "movie":
             # This is a movie
             data = {
                 "movies": [{
@@ -140,7 +143,7 @@ def main():
                     "rating": item["Rating"]
                 }]
             }
-            print(f"Rating movie {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
+            print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
 
         # Make the API call to rate the item
         response = requests.post(rate_url, headers=headers, json=data)
