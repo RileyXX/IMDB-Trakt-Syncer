@@ -3,10 +3,10 @@ import json
 import subprocess
 import requests
 import time
-from . import checkChromedriver
-from . import verifyCredentials
-from . import traktRatings
-from . import imdbRatings
+from IMDbTraktSyncer import checkChromedriver
+from IMDbTraktSyncer import verifyCredentials
+from IMDbTraktSyncer import traktRatings
+from IMDbTraktSyncer import imdbRatings
 from chromedriver_py import binary_path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -76,6 +76,8 @@ def main():
         
     trakt_ratings = traktRatings.trakt_ratings
     imdb_ratings = imdbRatings.imdb_ratings
+    trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None] #filter out items without imdb id
+    imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None] #filter out items without imdb id
     imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
     trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
 
@@ -127,7 +129,7 @@ def main():
                     "rating": item["Rating"]
                 }]
             }
-            print(f"Rating TV show {item['Title']} ({item['Year']}) with rating {item['Rating']} on Trakt")
+            print(f"Rating TV show {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
         else:
             # This is a movie
             data = {
@@ -138,7 +140,7 @@ def main():
                     "rating": item["Rating"]
                 }]
             }
-            print(f"Rating movie {item['Title']} ({item['Year']}) with rating {item['Rating']} on Trakt")
+            print(f"Rating movie {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
 
         # Make the API call to rate the item
         response = requests.post(rate_url, headers=headers, json=data)
