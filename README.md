@@ -4,8 +4,9 @@ This script will sync user ratings for Movies and TV Shows both ways between Tra
 1. Install [Python](https://www.python.org/downloads/) and [Google Chrome](https://www.google.com/chrome/). _If these are already installed on your machine you can ignore this step. Please note this script does not effect Chrome in anyway it is simply required in order for chromedriver to work._
 2. Run `python -m pip install IMDbTraktSyncer` in command line.
 3. Login to [Trakt](https://trakt.tv/oauth/applications) and create a new API application. We will name it `IMDbTraktSyncer`. In the Redirect uri field enter `urn:ietf:wg:oauth:2.0:oob` then Save. 
-4. Run the script by calling `IMDbTraktSyncer` in command line. Follow the prompts on first run. It will ask you to fill in your Trakt client id and client secret from step 3. It will also ask you to enter your IMDb username and password. Please note that these details are saved insecurely as credentials.txt in the same folder as the script. Recommended to change your password to something unique beforehand.
-5. Done, setup complete. The script will continue to run and sync your ratings. This may take some time, you can follow its progress in the command line.
+4. Run the script by calling `IMDbTraktSyncer` in command line. 
+5. Follow the prompts on first run. It will ask you to fill in your Trakt client id and client secret from step 3. It will also ask you to enter your IMDb username and password. Please note that these details are saved insecurely as credentials.txt in the same folder as the script. Recommended to change your password to something unique beforehand.
+6. Done, setup complete. The script will continue to run and sync your ratings. This may take some time, you can follow its progress in the command line.
 
 ## Run:
 `IMDbTraktSyncer` in command line.
