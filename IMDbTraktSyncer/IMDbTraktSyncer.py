@@ -3,11 +3,6 @@ import json
 import subprocess
 import requests
 import time
-from IMDbTraktSyncer import checkChromedriver
-from IMDbTraktSyncer import verifyCredentials
-from IMDbTraktSyncer import traktRatings
-from IMDbTraktSyncer import imdbRatings
-from chromedriver_py import binary_path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -15,6 +10,17 @@ from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+try:
+    from IMDbTraktSyncer import checkChromedriver
+    from IMDbTraktSyncer import verifyCredentials
+    from IMDbTraktSyncer import traktRatings
+    from IMDbTraktSyncer import imdbRatings
+except:
+    import checkChromedriver
+    import verifyCredentials
+    import traktRatings
+    import imdbRatings
+from chromedriver_py import binary_path
 
 
 def main():
