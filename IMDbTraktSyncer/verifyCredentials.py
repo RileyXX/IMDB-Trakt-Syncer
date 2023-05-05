@@ -1,4 +1,8 @@
 import os
+try:
+    from IMDbTraktSyncer import authTrakt
+except:
+    import authTrakt
 
 # Define the file path
 here = os.path.abspath(os.path.dirname(__file__))
@@ -32,18 +36,22 @@ for key in values.keys():
             for key, value in values.items():
                 f.write(f"{key}={value}\n")
 
-# Get the trakt_access_token value if it exists, or run the authTrakt.py script to get it
+# Get the trakt_access_token value if it exists, or run the authTrakt.py function to get it
 trakt_access_token = None
 if "trakt_access_token" in values and values["trakt_access_token"] != "empty":
     trakt_access_token = values["trakt_access_token"]
 else:
-    here = os.path.abspath(os.path.dirname(__file__))
-    authTraktPath = os.path.join(here, 'authTrakt.py')
-    os.system(f"python {authTraktPath}")
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-    for line in lines:
-        key, value = line.strip().split("=")
-        if key == "trakt_access_token":
-            trakt_access_token = value
-            break
+    client_id = values["trakt_client_id"]
+    client_secret = values["trakt_client_secret"]
+    trakt_access_token = authTrakt.authenticate(client_id, client_secret)
+    values["trakt_access_token"] = trakt_access_token
+    with open(file_path, "w") as f:
+        for key, value in values.items():
+            f.write(f"{key}={value}\n")
+
+# Save the credential values as variables
+trakt_client_id = values["trakt_client_id"]
+trakt_client_secret = values["trakt_client_secret"]
+trakt_access_token = values["trakt_access_token"]
+imdb_username = values["imdb_username"]
+imdb_password = values["imdb_password"]

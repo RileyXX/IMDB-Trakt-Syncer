@@ -9,21 +9,20 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from chromedriver_py import binary_path
+try:
+    from IMDbTraktSyncer import verifyCredentials
+except:
+    import verifyCredentials
 
+#Get IMDb Ratings
 print('Getting IMDB Ratings')
 
-here = os.path.abspath(os.path.dirname(__file__))
-file_path = os.path.join(here, 'credentials.txt')
-with open(file_path, "r") as f:
-    lines = f.readlines()
-values = {}
-for line in lines:
-    key, value = line.strip().split("=")
-    values[key] = value
-imdb_username = values["imdb_username"]
-imdb_password = values["imdb_password"]
+imdb_username = verifyCredentials.imdb_username
+imdb_password = verifyCredentials.imdb_password
 
 directory = os.path.dirname(os.path.realpath(__file__))
+
+#Start web driver
 options = Options()
 options.add_argument("--headless=new")
 options.add_argument('--disable-notifications')
@@ -45,8 +44,8 @@ if sign_in_link.text == 'Sign in with IMDb':
 email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
 password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
 
-email_input.send_keys(values["imdb_username"])
-password_input.send_keys(values["imdb_password"])
+email_input.send_keys(imdb_username)
+password_input.send_keys(imdb_password)
 
 submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='submit']")))
 submit_button.click()
@@ -68,7 +67,7 @@ dropdown.click()
 csv_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".pop-up-menu-list-items a.pop-up-menu-list-item-link")))
 csv_link.click()
 
-#Wait for csv download to complete
+#Wait for csv download to complete and close web driver
 time.sleep(10)
 driver.quit()
 service.stop()
@@ -76,6 +75,7 @@ service.stop()
 imdb_ratings = []
 
 # Read the ratings from the CSV file
+here = os.path.abspath(os.path.dirname(__file__))
 ratings_path = os.path.join(here, 'ratings.csv')
 try:
     with open(ratings_path, 'r') as file:
@@ -98,10 +98,6 @@ except FileNotFoundError:
 for file in os.listdir(directory):
     if file.endswith('.csv'):
         os.remove(os.path.join(directory, file))
-
-# Print the results
-#for rating in imdb_ratings:
-#    print(f'Title: {rating["Title"]}, Year: {rating["Year"]}, Rating: {rating["Rating"]}, IMDB ID: {rating["ID"]}')
 
 print('Getting IMDB Ratings Complete')
 

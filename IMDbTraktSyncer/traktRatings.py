@@ -1,20 +1,17 @@
 import os
 import json
 import subprocess
-import requests 
+import requests
+try:
+    from IMDbTraktSyncer import verifyCredentials
+except:
+    import verifyCredentials
 
+#Get Trakt Ratings
 print('Getting Trakt Ratings')
 
-here = os.path.abspath(os.path.dirname(__file__))
-file_path = os.path.join(here, 'credentials.txt')
-with open(file_path, "r") as f:
-    lines = f.readlines()
-values = {}
-for line in lines:
-    key, value = line.strip().split("=")
-    values[key] = value
-CLIENT_ID = values["trakt_client_id"]
-ACCESS_TOKEN = values["trakt_access_token"]
+CLIENT_ID = verifyCredentials.trakt_client_id
+ACCESS_TOKEN = verifyCredentials.trakt_access_token
 
 headers = {
     'Content-Type': 'application/json',
@@ -43,13 +40,5 @@ for item in json_data:
         show_ratings.append({'Title': show['title'], 'Year': show['year'], 'Rating': item['rating'], 'ID': show_id, 'Type': 'show'})
 
 trakt_ratings = movie_ratings + show_ratings
-
-#print('Movie ratings:')
-#for item in movie_ratings:
-#    print(f'{item["Title"]} ({item["Year"]}): {item["Rating"]}/10 (IMDb ID: {item["ID"]})')
-#
-#print('\nShow ratings:')
-#for item in show_ratings:
-#    print(f'{item["Title"]} ({item["Year"]}): {item["Rating"]}/10 (IMDb ID: {item["ID"]})')
 
 print('Getting Trakt Ratings Complete')
