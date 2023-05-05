@@ -25,20 +25,14 @@ from chromedriver_py import binary_path
 
 def main():
 
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-    values = {}
-    for line in lines:
-        key, value = line.strip().split("=")
-        values[key] = value
-    trakt_client_id = values["trakt_client_id"]
-    trakt_client_secret = values["trakt_client_secret"]
-    trakt_access_token = values["trakt_access_token"]
-    imdb_username = values["imdb_username"]
-    imdb_password = values["imdb_password"]
+    #Get credentials
+    trakt_client_id = verifyCredentials.trakt_client_id
+    trakt_client_secret = verifyCredentials.trakt_client_secret
+    trakt_access_token = verifyCredentials.trakt_access_token
+    imdb_username = verifyCredentials.imdb_username
+    imdb_password = verifyCredentials.imdb_password
 
+    #Start web driver
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument('--disable-notifications')
@@ -80,8 +74,10 @@ def main():
         
     print('Setting IMDB Ratings')
         
+    #Get trakt and imdb ratings and filter out trakt ratings wish missing imbd id
     trakt_ratings = [rating for rating in traktRatings.trakt_ratings if rating['ID'] is not None]
     imdb_ratings = [rating for rating in imdbRatings.imdb_ratings if rating['ID'] is not None]
+    #Filter out ratings already set
     imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
     trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
 
@@ -161,7 +157,7 @@ def main():
         if response.status_code != 201:
             print(f"Error rating {item}: {response.content}")
 
-
+    #Close web driver
     print("Closing webdriver...")
     driver.quit()
     service.stop()
