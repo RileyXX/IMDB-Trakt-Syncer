@@ -31,12 +31,23 @@ def main():
     trakt_access_token = verifyCredentials.trakt_access_token
     imdb_username = verifyCredentials.imdb_username
     imdb_password = verifyCredentials.imdb_password
-
+    
+    directory = os.path.dirname(os.path.realpath(__file__))
+    
     #Start web driver
+    print('Starting webdriver')
     options = Options()
     options.add_argument("--headless=new")
-    options.add_argument('--disable-notifications')
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
+    options.add_experimental_option("prefs", {"download.default_directory": directory, "download.directory_upgrade": True, "download.prompt_for_download": False})
+    options.add_argument('--disable-notifications')
+    options.add_argument("--disable-third-party-cookies")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-extensions")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument('--log-level=3')
 
     service = Service(executable_path=binary_path)
     driver = webdriver.Chrome(service=service, options=options)
@@ -71,12 +82,15 @@ def main():
         print("Not signed in")
     else:
         print("Signed in")
-        
+    
+    trakt_ratings = traktRatings.getTraktRatings(trakt_client_id, trakt_access_token)
+    imdb_ratings = imdbRatings.getImdbRatings(imdb_username, imdb_password, driver, directory, wait)
+    
     print('Setting IMDB Ratings')
         
     #Get trakt and imdb ratings and filter out trakt ratings wish missing imbd id
-    trakt_ratings = [rating for rating in traktRatings.trakt_ratings if rating['ID'] is not None]
-    imdb_ratings = [rating for rating in imdbRatings.imdb_ratings if rating['ID'] is not None]
+    trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None]
+    imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None]
     #Filter out ratings already set
     imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
     trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
