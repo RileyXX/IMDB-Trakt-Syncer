@@ -40,6 +40,7 @@ def main():
     options.add_argument("--headless=new")
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
     options.add_experimental_option("prefs", {"download.default_directory": directory, "download.directory_upgrade": True, "download.prompt_for_download": False})
+    options.add_argument("--disable-save-password-bubble")
     options.add_argument('--disable-notifications')
     options.add_argument("--disable-third-party-cookies")
     options.add_argument("--disable-dev-shm-usage")
