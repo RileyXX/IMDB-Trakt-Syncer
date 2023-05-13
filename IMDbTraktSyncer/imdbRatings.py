@@ -49,7 +49,7 @@ def getImdbRatings(imdb_username, imdb_password, driver, directory, wait):
         
     # Delete csv files
     for file in os.listdir(directory):
-        if file.endswith('.csv'):
+        if file.endswith('.csv') and 'ratings' in file:
             os.remove(os.path.join(directory, file))
 
     print('Getting IMDB Ratings Complete')
