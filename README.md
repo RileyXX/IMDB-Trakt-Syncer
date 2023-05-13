@@ -32,7 +32,7 @@ This python script will sync user ratings for Movies and TV Shows both ways betw
 * If any of your details change, passwords, logins, api keys etc, just delete credentials.txt and that will reset the script. It will prompt you to enter your new details on next run.
 
 ## Screenshot:
-![Demo](https://i.imgur.com/uydTDcg.png)
+![Demo](https://i.imgur.com/QXCtGrr.png)
 
 
 ## Sponsorships, Donations and Custom Projects:
