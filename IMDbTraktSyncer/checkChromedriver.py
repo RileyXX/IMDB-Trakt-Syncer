@@ -41,6 +41,15 @@ def install_chromedriver(version):
     # Install the chromedriver-py package using pip
     subprocess.run(['pip', 'install', f'chromedriver-py=={version}'])
 
+def install_chromedriver_fallback_method():
+    print("Using install chromedriver-py fallback method")
+    # Install the chromedriver-py package using pip
+    feed = feedparser.parse('https://pypi.org/rss/project/chromedriver-py/releases.xml')
+    # Get the second latest release version
+    version = feed.entries[1].title.split()[-1]
+    # Install the chromedriver-py package using pip
+    subprocess.run(['pip', 'install', f'chromedriver-py=={version}'])
+
 # Check if chromedriver-py is already installed
 try:
     dist = pkg_resources.get_distribution('chromedriver-py')
@@ -87,5 +96,7 @@ except pkg_resources.DistributionNotFound:
             install_chromedriver(matching_version)
         else:
             print(f"No matching chromedriver-py version found for Chrome {chrome_version}")
+            install_chromedriver_fallback_method()
     else:
         print("Failed to retrieve Chrome version.")
+        install_chromedriver_fallback_method()
