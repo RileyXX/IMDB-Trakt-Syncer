@@ -17,6 +17,9 @@ This python script will sync user ratings for Movies and TV Shows both ways betw
 ## Uninstall:
 `python -m pip uninstall IMDbTraktSyncer` in command line.
 
+## Install a specific version:
+`python -m pip install IMDbTraktSyncer==VERSION_NUMBER` in command line. Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDb-Trakt-Syncer/releases).
+
 ## Alternative manual no pip install method:
 1. Install [Python](https://www.python.org/downloads/) and [Google Chrome](https://www.google.com/chrome/). _If these are already installed on your machine you can ignore this step. Please note this script does not effect Chrome in anyway it is simply required in order for chromedriver to work._
 2. Download the latest .zip from the [releases page](https://github.com/RileyXX/IMDb-Trakt-Syncer/releases) and extract it to the file directory of your choice.
