@@ -121,29 +121,24 @@ def main():
 
         # loop through each movie and TV show rating and submit rating on IMDb website
         for i, item in enumerate(imdb_ratings_to_set, 1):
-            print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]} ({item["Year"]}): {item["Rating"]}/10 on IMDb')
+            year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
+            print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDb')
             driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
-            time.sleep(2)
 
             # click on "Rate" button and select rating option, then submit rating
-            buttons = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'button.ipc-btn span')))
-            found_rate_button = False
-            for button in buttons:
-                try:
-                    element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
-                    if element_rating_bar:
-                        driver.execute_script("arguments[0].click();", button)
-                        rating_option_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
-                        driver.execute_script("arguments[0].click();", rating_option_element)
-                        submit_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                        submit_element.click()
-                        found_rate_button = True
-                        break
-                except:
-                    continue
-
-            if not found_rate_button:
+            button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-btn span')))
+            try:
+                element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
+                if element_rating_bar:
+                    driver.execute_script("arguments[0].click();", button)
+                    rating_option_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                    driver.execute_script("arguments[0].click();", rating_option_element)
+                    submit_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                    submit_element.click()
+                    time.sleep(1)
+            except:
                 continue
+
         print('Setting IMDb Ratings Complete')
     else:
         print('No IMDb Ratings To Set')
@@ -180,7 +175,7 @@ def main():
                         "rating": item["Rating"]
                     }]
                 }
-                print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
+                print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
             elif item["Type"] == "movie":
                 # This is a movie
                 data = {
@@ -191,7 +186,18 @@ def main():
                         "rating": item["Rating"]
                     }]
                 }
-                print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) with rating {item['Rating']}/10 on Trakt")
+                print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+            elif item["Type"] == "episode":
+                # This is an episode
+                data = {
+                    "episodes": [{
+                        "ids": {
+                            "imdb": item["ID"]
+                        },
+                        "rating": item["Rating"]
+                    }]
+                }
+                print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
             # Make the API call to rate the item
             response = requests.post(rate_url, headers=headers, json=data)

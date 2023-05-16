@@ -39,10 +39,14 @@ def getImdbRatings(imdb_username, imdb_password, driver, directory, wait):
                 year = row[8]
                 rating = row[1]
                 imdb_id = row[0]
-                if "tv" in row[5]:
+                if "tvSeries" in row[5] or "tvMiniSeries" in row[5]:
                     type = "show"
-                else:
+                elif "tvEpisode" in row[5]:
+                    type = "episode"
+                elif "movie" in row[5]:
                     type = "movie"
+                else:
+                    type = "unknown"
                 imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id, 'Type': type})
     except FileNotFoundError:
         print('Ratings file not found')
