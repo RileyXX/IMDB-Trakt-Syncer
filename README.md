@@ -34,7 +34,7 @@ _Execute in your operating system's native command line._
 ```
 python -m pip install IMDBTraktSyncer==VERSION_NUMBER
 ```
-_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.0.1) and execute in your operating system's native command line._
+_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and execute in your operating system's native command line._
 
 ## Alternative Manual Installation Method (without pip install)
 1. Install [Python](https://www.python.org/downloads/) and [Google Chrome](https://www.google.com/chrome/).  _If these are already installed, you can skip this step. Please note this script does not affect Chrome in anyway, it is simply required in order for chromedriver to work._
