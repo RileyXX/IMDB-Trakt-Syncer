@@ -1,5 +1,4 @@
 import requests
-import os
 
 def authenticate(client_id, client_secret):
     CLIENT_ID = client_id

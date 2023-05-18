@@ -1,6 +1,4 @@
-import os
 import json
-import subprocess
 import requests
 
 def getTraktRatings(trakt_client_id, trakt_access_token):
