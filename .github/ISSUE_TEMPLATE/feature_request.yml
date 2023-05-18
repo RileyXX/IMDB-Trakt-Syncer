@@ -1,0 +1,23 @@
+name: Feature Request
+description: Suggest an idea for this project
+title: "[Feature Request]: "
+body:
+- type: checkboxes
+  attributes:
+    label: Is there already a request for your feature?
+    description: Please make sure you are not creating an already submitted <a href="https://github.com/RileyXX/IMDB-Trakt-Syncer/issues">request</a>. Be sure to check closed issues as well.
+    options:
+      - label: I have checked older issues, open and closed
+        required: true
+- type: textarea
+  attributes:
+    label: Feature Request
+    description: A clear and concise description the feature you would like to see implemented.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Alternatives you've considered
+    description: A clear and concise description of any alternative solutions or features you've considered.
+  validations:
+    required: false
