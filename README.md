@@ -13,28 +13,28 @@ This Python script syncs user ratings for Movies, TV Shows and episodes between 
 ```
 python -m pip install IMDBTraktSyncer
 ```
-_Execute in your operating system's native command line._
+_Run in your operating system's native command line._
 ## Running the Script:
 ```
 IMDBTraktSyncer
 ```
-_Execute in your operating system's native command line._
+_Run in your operating system's native command line._
 ## Updating the Script:
 ```
 python -m pip install IMDBTraktSyncer --upgrade
 ```
-_Execute in your operating system's native command line._
+_Run in your operating system's native command line._
 ## Uninstalling the Script:
 ```
 python -m pip uninstall IMDBTraktSyncer
 ```
-_Execute in your operating system's native command line._
+_Run in your operating system's native command line._
 
 ## Installing a Specific Version:
 ```
 python -m pip install IMDBTraktSyncer==VERSION_NUMBER
 ```
-_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and execute in your operating system's native command line._
+_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and run in your operating system's native command line._
 
 ## Alternative Manual Installation Method (without pip install)
 1. Install [Python](https://www.python.org/downloads/) and [Google Chrome](https://www.google.com/chrome/).  _If these are already installed, you can skip this step. Please note this script does not affect Chrome in anyway, it is simply required in order for chromedriver to work._
