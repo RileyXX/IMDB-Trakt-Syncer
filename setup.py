@@ -10,17 +10,17 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '1.1.5'
-DESCRIPTION = 'This python script will sync user ratings for Movies and TV Shows both ways between Trakt and IMDb.'
+VERSION = '1.1.6'
+DESCRIPTION = 'This python script will sync user ratings for Movies and TV Shows both ways between Trakt and IMDB.'
 
 # Setting up
 setup(
-    name="IMDbTraktSyncer",
+    name="IMDBTraktSyncer",
     version=VERSION,
     description=DESCRIPTION,
     long_description_content_type="text/markdown",
     long_description=long_description,
-    url="https://github.com/RileyXX/IMDb-Trakt-Syncer",
+    url="https://github.com/RileyXX/IMDB-Trakt-Syncer",
     packages=find_packages(),
     install_requires=['requests', 'feedparser', 'selenium'],
     keywords=['python', 'video', 'trakt', 'imdb', 'ratings', 'sync', 'movies', 'tv shows'],
@@ -32,7 +32,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'IMDbTraktSyncer = IMDbTraktSyncer.IMDbTraktSyncer:main'
+            'IMDBTraktSyncer = IMDBTraktSyncer.IMDBTraktSyncer:main'
         ]
     }
 )
