@@ -12,10 +12,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
 try:
-    from IMDbTraktSyncer import checkChromedriver
-    from IMDbTraktSyncer import verifyCredentials
-    from IMDbTraktSyncer import traktRatings
-    from IMDbTraktSyncer import imdbRatings
+    from IMDBTraktSyncer import checkChromedriver
+    from IMDBTraktSyncer import verifyCredentials
+    from IMDBTraktSyncer import traktRatings
+    from IMDBTraktSyncer import imdbRatings
 except:
     import checkChromedriver
     import verifyCredentials
@@ -63,7 +63,7 @@ def main():
         if "This version of ChromeDriver only supports Chrome version" in error_message:
             extract_message = error_message.split("Stacktrace:")[0].replace("Message: session not created:", "").strip()
             print(f"Error: {extract_message}")
-            print("See this link for details on how to fix: https://github.com/RileyXX/IMDb-Trakt-Syncer/issues/16")
+            print("See this link for details on how to fix: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/16")
             raise SystemExit
         else:
             raise
@@ -87,7 +87,7 @@ def main():
 
     time.sleep(2)
 
-    # go to IMDb homepage
+    # go to IMDB homepage
     driver.get('https://www.imdb.com/')
 
     time.sleep(2)
@@ -95,13 +95,13 @@ def main():
     # Check if signed in
     element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
     if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
-        print("Successfully signed in to IMDb")
+        print("Successfully signed in to IMDB")
     else:
-        print("Error: Not signed in to IMDb")
-        print("\nPossible IMDb captcha check or IMDb login incorrect.")
-        print("\nIf your login is correct then an IMDb captcha check likely the cause of this error. To fix this, simply login to the IMDb website in your browser, preferably Chrome, and from the same computer. If logged in, log out and log back in. It may ask you to fill in a captcha; complete it and finish logging in. After logging in successfully on your browser, run the script again and it should work. You may need to repeat this step once or twice if it still gives you issues.")
-        print("\nIf your IMDb login is incorrect, simply edit the credentials.txt file with the correct login or delete the credentials file and run the script again.")
-        print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDb-Trakt-Syncer/issues/2")
+        print("Error: Not signed in to IMDB")
+        print("\nPossible IMDB captcha check or IMDB login incorrect.")
+        print("\nIf your login is correct then an IMDB captcha check likely the cause of this error. To fix this, simply login to the IMDB website in your browser, preferably Chrome, and from the same computer. If logged in, log out and log back in. It may ask you to fill in a captcha; complete it and finish logging in. After logging in successfully on your browser, run the script again and it should work. You may need to repeat this step once or twice if it still gives you issues.")
+        print("\nIf your IMDB login is incorrect, simply edit the credentials.txt file with the correct login or delete the credentials file and run the script again.")
+        print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
         print("\nStopping script...")
         raise SystemExit
     
@@ -118,10 +118,10 @@ def main():
     if imdb_ratings_to_set:
         print('Setting IMDB Ratings')
 
-        # loop through each movie and TV show rating and submit rating on IMDb website
+        # loop through each movie and TV show rating and submit rating on IMDB website
         for i, item in enumerate(imdb_ratings_to_set, 1):
             year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-            print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDb')
+            print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
             driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
 
             # click on "Rate" button and select rating option, then submit rating
@@ -138,9 +138,9 @@ def main():
             except:
                 continue
 
-        print('Setting IMDb Ratings Complete')
+        print('Setting IMDB Ratings Complete')
     else:
-        print('No IMDb Ratings To Set')
+        print('No IMDB Ratings To Set')
 
     if trakt_ratings_to_set:
         print('Setting Trakt Ratings')

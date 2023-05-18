@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from chromedriver_py import binary_path
 
 def getImdbRatings(imdb_username, imdb_password, driver, directory, wait):
-    #Get IMDb Ratings
+    #Get IMDB Ratings
     print('Getting IMDB Ratings')
 
     driver.get('https://www.imdb.com/list/ratings')

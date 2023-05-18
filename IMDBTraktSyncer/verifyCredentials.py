@@ -1,7 +1,7 @@
 import os
 import json
 try:
-    from IMDbTraktSyncer import authTrakt
+    from IMDBTraktSyncer import authTrakt
 except:
     import authTrakt
 
