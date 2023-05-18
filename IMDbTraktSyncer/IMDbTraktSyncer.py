@@ -1,6 +1,5 @@
 import os
 import json
-import subprocess
 import requests
 import time
 import logging

@@ -42,7 +42,7 @@ with open(file_path, "r") as f:
 # Check if any of the values are "empty" and prompt the user to enter them
 for key in values.keys():
     if values[key] == "empty" and key != "trakt_access_token":
-        values[key] = input(f"Please enter a value for {key}: ")
+        values[key] = input(f"Please enter a value for {key}: ").strip()
         with open(file_path, "w") as f:
             json.dump(values, f)
 
