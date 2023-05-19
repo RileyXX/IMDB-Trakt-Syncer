@@ -14,9 +14,8 @@ body:
     description: Please describe the issue your are having, include error messages and any relevant steps needed to reproduce the error.
     placeholder: |
       Error Message: `paste code here`
-      ## Steps needed to reproduce the error:
-      1. 
-      2. ...
+      Steps needed to reproduce the error:
+      1. ...
   validations:
     required: true
 - type: textarea
