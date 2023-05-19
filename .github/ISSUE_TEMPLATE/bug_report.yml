@@ -13,8 +13,10 @@ body:
     label: Bug Description
     description: Please describe the issue your are having, include error messages and any relevant steps needed to reproduce the error.
     placeholder: |
-      Describe your issue and any steps needed to reproduce the error.
-    render: markdown
+      Error Message: `paste code here`
+      ## Steps needed to reproduce the error:
+      1. 
+      2. ...
   validations:
     required: true
 - type: textarea
@@ -25,7 +27,6 @@ body:
       OS: Windows 10 or 11/Linux/macOS etc
       Using pip install method: yes
       Using manual no pip install method: no
-    render: markdown
   validations:
     required: true
 - type: textarea
