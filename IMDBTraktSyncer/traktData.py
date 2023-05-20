@@ -1,6 +1,7 @@
 import json
 import requests
 import time
+import urllib.parse
 try:
     from IMDBTraktSyncer import errorHandling as EH
 except ImportError:
