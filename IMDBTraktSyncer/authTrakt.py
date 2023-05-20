@@ -1,5 +1,9 @@
 import requests
 import time
+try:
+    from IMDBTraktSyncer import errorHandling
+except:
+    import errorHandling
 
 def authenticate(client_id, client_secret):
     CLIENT_ID = client_id
@@ -38,10 +42,7 @@ def authenticate(client_id, client_secret):
     }
 
     # Make the request to get the access token
-    response = requests.post('https://api.trakt.tv/oauth/token', headers=headers, json=data)
-    while response.status_code == 429:
-        time.sleep(1)
-        response = requests.post('https://api.trakt.tv/oauth/token', headers=headers, json=data)
+    response = errorHandling.make_trakt_request('https://api.trakt.tv/oauth/token', payload=data)
 
     # Parse the JSON response from the API
     json_data = response.json()

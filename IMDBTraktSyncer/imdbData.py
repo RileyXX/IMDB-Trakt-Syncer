@@ -12,8 +12,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from chromedriver_py import binary_path
 try:
     from IMDBTraktSyncer import verifyCredentials
+    from IMDBTraktSyncer import errorHandling
 except:
     import verifyCredentials
+    import errorHandling
 
 def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     # Process IMDB Ratings and Reviews
@@ -68,17 +70,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     
     def get_media_type(imdb_id):
         url = f"https://api.trakt.tv/search/imdb/{imdb_id}"
-        headers = {
-            "Content-Type": "application/json",
-            "trakt-api-version": "2",
-            "trakt-api-key": verifyCredentials.trakt_client_id
-        }
-        
-        response = requests.get(url, headers=headers)
-        while response.status_code == 429:
-            time.sleep(1)
-            response = requests.get(url, headers=headers)
-        if response.status_code == 200:
+        response = errorHandling.make_trakt_request(url)
+        if response:
             results = response.json()
             if results:
                 media_type = results[0]['type']

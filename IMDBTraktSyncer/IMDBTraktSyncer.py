@@ -30,9 +30,6 @@ def main():
     try:
 
         #Get credentials
-        trakt_client_id = verifyCredentials.trakt_client_id
-        trakt_client_secret = verifyCredentials.trakt_client_secret
-        trakt_access_token = verifyCredentials.trakt_access_token
         imdb_username = verifyCredentials.imdb_username
         imdb_password = verifyCredentials.imdb_password
         
@@ -108,7 +105,7 @@ def main():
             print("\nStopping script...")
             raise SystemExit
         
-        trakt_ratings, trakt_reviews = traktData.getTraktData(trakt_client_id, trakt_access_token)
+        trakt_ratings, trakt_reviews = traktData.getTraktData()
         imdb_ratings, imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
 
         #Get trakt and imdb ratings and filter out trakt ratings with missing imdb id
@@ -168,16 +165,7 @@ def main():
                 print('Setting Trakt Ratings')
 
                 # Set the API endpoints
-                oauth_url = "https://api.trakt.tv/oauth/token"
                 rate_url = "https://api.trakt.tv/sync/ratings"
-
-                # Set the headers
-                headers = {
-                    "Content-Type": "application/json",
-                    "trakt-api-version": "2",
-                    "trakt-api-key": trakt_client_id,
-                    "Authorization": f"Bearer {trakt_access_token}"
-                }
                 
                 # Count the total number of items to rate
                 num_items = len(trakt_ratings_to_set)
@@ -221,12 +209,9 @@ def main():
                         print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
                     # Make the API call to rate the item
-                    response = requests.post(rate_url, headers=headers, json=data)
-                    while response.status_code == 429:
-                        print("Rate limit exceeded. Waiting for 1 second...")
-                        time.sleep(1)
-                        response = requests.post(rate_url, headers=headers, json=data)
-                    if response.status_code != 201:
+                    response = errorHandling.make_trakt_request(rate_url, payload=data)
+
+                    if response is None:
                         print(f"Error rating {item}: {response.content}")
 
                 print('Setting Trakt Ratings Complete')
@@ -281,13 +266,6 @@ def main():
                     imdb_id = review['ID']
                     comment = review['Comment']
                     media_type = review['Type']  # 'movie', 'show', or 'episode'
-                    
-                    headers = {
-                        "Content-Type": "application/json",
-                        "trakt-api-version": "2",
-                        "trakt-api-key": trakt_client_id,
-                        "Authorization": f"Bearer {trakt_access_token}"
-                    }
 
                     url = f"https://api.trakt.tv/comments"
 
@@ -313,13 +291,9 @@ def main():
                                 "imdb": episode_id
                             }
                         }
-
-                    response = requests.post(url, headers=headers, json=data)
-                    while response.status_code == 429:
-                        print("Rate limit exceeded. Waiting for 1 second...")
-                        time.sleep(1)
-                        response = requests.post(url, headers=headers, json=data)
-                    if response.status_code == 201:
+                    
+                    response = errorHandling.make_trakt_request(url, payload=data)
+                    if response:
                         print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
                     else:
                         print(f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
