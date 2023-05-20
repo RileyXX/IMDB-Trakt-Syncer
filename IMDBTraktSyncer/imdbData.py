@@ -11,11 +11,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from chromedriver_py import binary_path
 try:
-    from IMDBTraktSyncer import verifyCredentials
-    from IMDBTraktSyncer import errorHandling
-except:
-    import verifyCredentials
-    import errorHandling
+    from IMDBTraktSyncer import errorHandling as EH
+except ImportError:
+    import errorHandling as EH
 
 def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     # Process IMDB Ratings and Reviews
@@ -70,11 +68,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     
     def get_media_type(imdb_id):
         url = f"https://api.trakt.tv/search/imdb/{imdb_id}"
-        response = errorHandling.make_trakt_request(url)
+        response = EH.make_trakt_request(url)
         if response:
             results = response.json()
             if results:
-                media_type = results[0]['type']
+                media_type = results[0].get('type')
                 return media_type
         return None
 
