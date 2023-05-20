@@ -42,13 +42,13 @@ def getTraktData():
     trakt_ratings = movie_ratings + show_ratings + episode_ratings
 
     # Get Trakt Comments
-    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{username}/comments')
+    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/comments')
     json_data = json.loads(response.text)
     total_pages = response.headers.get('X-Pagination-Page-Count')
     trakt_comments = []
 
     for page in range(1, int(total_pages) + 1):
-        response = EH.make_trakt_request(f'https://api.trakt.tv/users/{username}/comments', params={'page': page})
+        response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/comments', params={'page': page})
         json_data = json.loads(response.text)
 
         for comment in json_data:
