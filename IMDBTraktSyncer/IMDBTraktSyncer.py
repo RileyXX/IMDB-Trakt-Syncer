@@ -13,16 +13,16 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
 try:
     from IMDBTraktSyncer import checkChromedriver
-    from IMDBTraktSyncer import verifyCredentials
+    from IMDBTraktSyncer import verifyCredentials as VC
     from IMDBTraktSyncer import traktData
     from IMDBTraktSyncer import imdbData
-    from IMDBTraktSyncer import errorHandling
-except:
+    from IMDBTraktSyncer import errorHandling as EH
+except ImportError:
     import checkChromedriver
-    import verifyCredentials
+    import verifyCredentials as VC
     import traktData
     import imdbData
-    import errorHandling
+    import errorHandling as EH
 from chromedriver_py import binary_path
 
 
@@ -30,8 +30,8 @@ def main():
     try:
 
         #Get credentials
-        imdb_username = verifyCredentials.imdb_username
-        imdb_password = verifyCredentials.imdb_password
+        imdb_username = VC.imdb_username
+        imdb_password = VC.imdb_password
         
         directory = os.path.dirname(os.path.realpath(__file__))
         
@@ -159,7 +159,7 @@ def main():
         else:
             print('No IMDB Ratings To Set')
 
-        if verifyCredentials.sync_reviews_value:
+        if VC.sync_reviews_value:
             #Set Trakt Ratings
             if trakt_ratings_to_set:
                 print('Setting Trakt Ratings')
@@ -209,7 +209,7 @@ def main():
                         print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
                     # Make the API call to rate the item
-                    response = errorHandling.make_trakt_request(rate_url, payload=data)
+                    response = EH.make_trakt_request(rate_url, payload=data)
 
                     if response is None:
                         print(f"Error rating {item}: {response.content}")
@@ -220,7 +220,7 @@ def main():
             
             if imdb_reviews_to_set:
                 # Call the check_last_run() function
-                if verifyCredentials.check_imdb_reviews_last_submitted():
+                if VC.check_imdb_reviews_last_submitted():
                     print('Setting IMDB Reviews')
                     
                     for review in imdb_reviews_to_set:
@@ -292,7 +292,7 @@ def main():
                             }
                         }
                     
-                    response = errorHandling.make_trakt_request(url, payload=data)
+                    response = EH.make_trakt_request(url, payload=data)
                     if response:
                         print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
                     else:
@@ -310,7 +310,7 @@ def main():
     
     except Exception as e:
         error_message = "An error occurred while running the script."
-        errorHandling.report_error(error_message)
+        EH.report_error(error_message)
 
 if __name__ == '__main__':
     main()

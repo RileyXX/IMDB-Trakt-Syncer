@@ -3,7 +3,7 @@ import json
 import datetime
 try:
     from IMDBTraktSyncer import authTrakt
-except:
+except ImportError:
     import authTrakt
 
 # Define the file path

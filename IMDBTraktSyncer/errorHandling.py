@@ -1,9 +1,9 @@
 import traceback
 import requests
 try:
-    from IMDBTraktSyncer import verifyCredentials
-except:
-    import verifyCredentials
+    from IMDBTraktSyncer import verifyCredentials as VC
+except ImportError:
+    import verifyCredentials as VC
 
 def report_error(error_message):
     github_issue_url = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/new?template=bug_report.yml"
@@ -23,8 +23,8 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
         headers = {
             'Content-Type': 'application/json',
             'trakt-api-version': '2',
-            'trakt-api-key': verifyCredentials.trakt_client_id,
-            'Authorization': f'Bearer {verifyCredentials.trakt_access_token}'
+            'trakt-api-key': VC.trakt_client_id,
+            'Authorization': f'Bearer {VC.trakt_access_token}'
         }
 
     retry_delay = 5  # seconds between retries
