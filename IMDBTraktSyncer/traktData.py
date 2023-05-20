@@ -12,10 +12,9 @@ def getTraktData():
 
     response = EH.make_trakt_request('https://api.trakt.tv/users/me')
     json_data = json.loads(response.text)
-    username = json_data['username']
-
-    # Get Trakt Ratings
-    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{username}/ratings')
+    username_slug = json_data['ids']['slug']
+    encoded_username = urllib.parse.quote(username_slug)
+    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/ratings')
     json_data = json.loads(response.text)
 
     movie_ratings = []
