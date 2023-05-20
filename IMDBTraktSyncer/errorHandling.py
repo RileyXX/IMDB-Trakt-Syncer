@@ -1,7 +1,7 @@
 import traceback
 
 def report_error(error_message):
-    github_issue_url = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/new?assignees=&labels=&projects=&template=bug_report.yml"
+    github_issue_url = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/new?template=bug_report.yml"
     traceback_info = traceback.format_exc()
 
     print("\n--- ERROR ---")

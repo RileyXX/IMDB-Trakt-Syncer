@@ -14,14 +14,14 @@ from selenium.common.exceptions import SessionNotCreatedException
 try:
     from IMDBTraktSyncer import checkChromedriver
     from IMDBTraktSyncer import verifyCredentials
-    from IMDBTraktSyncer import traktRatings
-    from IMDBTraktSyncer import imdbRatings
+    from IMDBTraktSyncer import traktData
+    from IMDBTraktSyncer import imdbData
     from IMDBTraktSyncer import errorHandling
 except:
     import checkChromedriver
     import verifyCredentials
-    import traktRatings
-    import imdbRatings
+    import traktData
+    import imdbData
     import errorHandling
 from chromedriver_py import binary_path
 
@@ -108,16 +108,33 @@ def main():
             print("\nStopping script...")
             raise SystemExit
         
-        trakt_ratings = traktRatings.getTraktRatings(trakt_client_id, trakt_access_token)
-        imdb_ratings = imdbRatings.getImdbRatings(imdb_username, imdb_password, driver, directory, wait)
+        trakt_ratings, trakt_reviews = traktData.getTraktData(trakt_client_id, trakt_access_token)
+        imdb_ratings, imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
 
-        #Get trakt and imdb ratings and filter out trakt ratings wish missing imbd id
+        #Get trakt and imdb ratings and filter out trakt ratings with missing imdb id
         trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None]
         imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None]
+        trakt_reviews = [review for review in trakt_reviews if review['ID'] is not None]
+        imdb_reviews = [review for review in imdb_reviews if review['ID'] is not None]
         #Filter out ratings already set
         imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
         trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
+        imdb_reviews_to_set = [review for review in trakt_reviews if review['ID'] not in [imdb_review['ID'] for imdb_review in imdb_reviews]]
+        trakt_reviews_to_set = [review for review in imdb_reviews if review['ID'] not in [trakt_review['ID'] for trakt_review in trakt_reviews]]
+        # Remove duplicate reviews and filter by out any items for imdb_reviews_to_set where comment length is less than 600 characters
+        def remove_duplicates_and_filter(lst, key, min_comment_length=None):
+            seen = set()
+            result = []
+            for item in lst:
+                if item[key] not in seen and (min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length)):
+                    seen.add(item[key])
+                    result.append(item)
+            return result
 
+        imdb_reviews_to_set = remove_duplicates_and_filter(imdb_reviews_to_set, 'ID', 600)
+        trakt_reviews_to_set = remove_duplicates_and_filter(trakt_reviews_to_set, 'ID')
+
+        #Set IMDB Ratings
         if imdb_ratings_to_set:
             print('Setting IMDB Ratings')
 
@@ -139,87 +156,184 @@ def main():
                         submit_element.click()
                         time.sleep(1)
                 except:
-                    continue
+                    pass
 
             print('Setting IMDB Ratings Complete')
         else:
             print('No IMDB Ratings To Set')
 
-        if trakt_ratings_to_set:
-            print('Setting Trakt Ratings')
+        if verifyCredentials.sync_reviews_value:
+            #Set Trakt Ratings
+            if trakt_ratings_to_set:
+                print('Setting Trakt Ratings')
 
-            # Set the API endpoints
-            oauth_url = "https://api.trakt.tv/oauth/token"
-            rate_url = "https://api.trakt.tv/sync/ratings"
+                # Set the API endpoints
+                oauth_url = "https://api.trakt.tv/oauth/token"
+                rate_url = "https://api.trakt.tv/sync/ratings"
 
-            # Set the headers
-            headers = {
-                "Content-Type": "application/json",
-                "trakt-api-version": "2",
-                "trakt-api-key": trakt_client_id,
-                "Authorization": f"Bearer {trakt_access_token}"
-            }
-            
-            # Count the total number of items to rate
-            num_items = len(trakt_ratings_to_set)
-            item_count = 0
-                    
-            # Loop through your data table and rate each item on Trakt
-            for item in trakt_ratings_to_set:
-                item_count += 1
-                if item["Type"] == "show":
-                    # This is a TV show
-                    data = {
-                        "shows": [{
-                            "ids": {
-                                "imdb": item["ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                elif item["Type"] == "movie":
-                    # This is a movie
-                    data = {
-                        "movies": [{
-                            "ids": {
-                                "imdb": item["ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                elif item["Type"] == "episode":
-                    # This is an episode
-                    data = {
-                        "episodes": [{
-                            "ids": {
-                                "imdb": item["ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                # Set the headers
+                headers = {
+                    "Content-Type": "application/json",
+                    "trakt-api-version": "2",
+                    "trakt-api-key": trakt_client_id,
+                    "Authorization": f"Bearer {trakt_access_token}"
+                }
+                
+                # Count the total number of items to rate
+                num_items = len(trakt_ratings_to_set)
+                item_count = 0
+                        
+                # Loop through your data table and rate each item on Trakt
+                for item in trakt_ratings_to_set:
+                    item_count += 1
+                    if item["Type"] == "show":
+                        # This is a TV show
+                        data = {
+                            "shows": [{
+                                "ids": {
+                                    "imdb": item["ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                    elif item["Type"] == "movie":
+                        # This is a movie
+                        data = {
+                            "movies": [{
+                                "ids": {
+                                    "imdb": item["ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                    elif item["Type"] == "episode":
+                        # This is an episode
+                        data = {
+                            "episodes": [{
+                                "ids": {
+                                    "imdb": item["ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
-                # Make the API call to rate the item
-                response = requests.post(rate_url, headers=headers, json=data)
-                time.sleep(1)
-                while response.status_code == 429:
-                    print("Rate limit exceeded. Waiting for 1 second...")
-                    time.sleep(1)
+                    # Make the API call to rate the item
                     response = requests.post(rate_url, headers=headers, json=data)
-                if response.status_code != 201:
-                    print(f"Error rating {item}: {response.content}")
+                    while response.status_code == 429:
+                        print("Rate limit exceeded. Waiting for 1 second...")
+                        time.sleep(1)
+                        response = requests.post(rate_url, headers=headers, json=data)
+                    if response.status_code != 201:
+                        print(f"Error rating {item}: {response.content}")
 
-            print('Setting Trakt Ratings Complete')
-        else:
-            print('No Trakt Ratings To Set')
+                print('Setting Trakt Ratings Complete')
+            else:
+                print('No Trakt Ratings To Set')
+            
+            if imdb_reviews_to_set:
+                # Call the check_last_run() function
+                if verifyCredentials.check_imdb_reviews_last_submitted():
+                    print('Setting IMDB Reviews')
+                    
+                    for review in imdb_reviews_to_set:
+                    
+                        driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
+                        
+                        review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
+                        review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
+                        
+                        review_title_input.send_keys("My Review")
+                        review_input.send_keys(review["Comment"])
+                        
+                        no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
+                        yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                        
+                        if review["Spoiler"]:
+                            yes_element.click()                        
+                        else:
+                            no_element.click()
+                                                
+                        submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+
+                        submit_button.click()
+                        
+                        time.sleep(1)
+                    
+                    print('Setting IMDB Reviews Complete')
+                else:
+                    print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
+            else:
+                print('No IMDB Reviews To Set')
+
+            # Set Trakt Reviews
+            if trakt_reviews_to_set:
+                print('Setting Trakt Reviews')
+
+                # Count the total number of items to rate
+                num_items = len(trakt_reviews_to_set)
+                item_count = 0
+
+                for review in trakt_reviews_to_set:
+                    item_count += 1
+                    imdb_id = review['ID']
+                    comment = review['Comment']
+                    media_type = review['Type']  # 'movie', 'show', or 'episode'
+                    
+                    headers = {
+                        "Content-Type": "application/json",
+                        "trakt-api-version": "2",
+                        "trakt-api-key": trakt_client_id,
+                        "Authorization": f"Bearer {trakt_access_token}"
+                    }
+
+                    url = f"https://api.trakt.tv/comments"
+
+                    data = {
+                        "comment": comment
+                    }
+
+                    if media_type == 'movie':
+                        data['movie'] = {
+                            "ids": {
+                                "imdb": imdb_id
+                            }
+                        }
+                    elif media_type == 'show':
+                        data['show'] = {
+                            "ids": {
+                                "imdb": imdb_id
+                            }
+                        }
+                    elif media_type == 'episode':
+                        data['episode'] = {
+                            "ids": {
+                                "imdb": episode_id
+                            }
+                        }
+
+                    response = requests.post(url, headers=headers, json=data)
+                    while response.status_code == 429:
+                        print("Rate limit exceeded. Waiting for 1 second...")
+                        time.sleep(1)
+                        response = requests.post(url, headers=headers, json=data)
+                    if response.status_code == 201:
+                        print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                    else:
+                        print(f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                        print("Error Response:", response.content, response.status_code)
+
+                print('Trakt Reviews Set Successfully')
+            else:
+                print('No Trakt Reviews To Set')
 
         #Close web driver
         print("Closing webdriver...")
         driver.quit()
         service.stop()
-        
+    
     except Exception as e:
         error_message = "An error occurred while running the script."
         errorHandling.report_error(error_message)

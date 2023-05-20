@@ -1,4 +1,5 @@
 import requests
+import time
 
 def authenticate(client_id, client_secret):
     CLIENT_ID = client_id
@@ -38,6 +39,9 @@ def authenticate(client_id, client_secret):
 
     # Make the request to get the access token
     response = requests.post('https://api.trakt.tv/oauth/token', headers=headers, json=data)
+    while response.status_code == 429:
+        time.sleep(1)
+        response = requests.post('https://api.trakt.tv/oauth/token', headers=headers, json=data)
 
     # Parse the JSON response from the API
     json_data = response.json()
