@@ -1,26 +1,21 @@
 import json
 import requests
 import time
+try:
+    from IMDBTraktSyncer import errorHandling
+except:
+    import errorHandling
 
-def getTraktData(trakt_client_id, trakt_access_token):
+def getTraktData():
     # Process Trakt Ratings and Comments
     print('Processing Trakt Ratings and Comments')
 
-    headers = {
-        'Content-Type': 'application/json',
-        'trakt-api-version': '2',
-        'trakt-api-key': trakt_client_id,
-        'Authorization': f'Bearer {trakt_access_token}'
-    }
-
-    time.sleep(1) # avoid trakt rate limit
-    response = requests.get('https://api.trakt.tv/users/me', headers=headers)
+    response = errorHandling.make_trakt_request('https://api.trakt.tv/users/me')
     json_data = json.loads(response.text)
     username = json_data['username']
 
     # Get Trakt Ratings
-    time.sleep(1) # avoid trakt rate limit
-    response = requests.get(f'https://api.trakt.tv/users/{username}/ratings', headers=headers)
+    response = errorHandling.make_trakt_request(f'https://api.trakt.tv/users/{username}/ratings')
     json_data = json.loads(response.text)
 
     movie_ratings = []
@@ -47,15 +42,13 @@ def getTraktData(trakt_client_id, trakt_access_token):
     trakt_ratings = movie_ratings + show_ratings + episode_ratings
 
     # Get Trakt Comments
-    time.sleep(1) # avoid trakt rate limit
-    response = requests.get(f'https://api.trakt.tv/users/{username}/comments', headers=headers)
+    response = errorHandling.make_trakt_request(f'https://api.trakt.tv/users/{username}/comments')
     json_data = json.loads(response.text)
     total_pages = response.headers.get('X-Pagination-Page-Count')
     trakt_comments = []
 
     for page in range(1, int(total_pages) + 1):
-        time.sleep(1) # avoid trakt rate limit
-        response = requests.get(f'https://api.trakt.tv/users/{username}/comments', headers=headers, params={'page': page})
+        response = errorHandling.make_trakt_request(f'https://api.trakt.tv/users/{username}/comments', params={'page': page})
         json_data = json.loads(response.text)
 
         for comment in json_data:
