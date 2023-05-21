@@ -48,7 +48,7 @@ _Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX
 
 ## For Setting Up Automation See the Following Sections:
 - Python Script to Update all Packages with Pip (Windows, Linux, Mac, ChromeOS, etc. [Link #1](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#python-script-to-update-all-packages-with-pip-windows-linux-mac-chromeos-etc)
-- Windows: Creating a .bat File to Run Multiple Python Projects and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop. [Link #2](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#windows-creating-a-bat-file-to-run-multiple-python-projects-and-optional-steps-for-opening-programs-and-creating-a-shortcut-to-run-on-demand-from-desktop)
+- Windows: Creating a .bat File to Run Multiple Python Projects at Once and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop. [Link #2](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#windows-creating-a-bat-file-to-run-multiple-python-projects-and-optional-steps-for-opening-programs-and-creating-a-shortcut-to-run-on-demand-from-desktop)
 - Windows: Auto-Running a File on Login, Once per Day, or Hourly using Task Scheduler (Background Execution. [Link #3](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#windows-auto-running-a-file-on-login-once-per-day-or-hourly-using-task-scheduler-background-execution)
 
 ## Troubleshooting, Known Issues, Workarounds & Future Outlook
@@ -102,7 +102,7 @@ if not outdated_packages:
 4. (Optional) Edit the `ignored_packages` value to exclude packages and projects from auto-updating.
 5. (Optional) For automation on Windows, including auto-running a file on login, once per day, or hourly. See this [section](https://github.com/RileyXX/IMDB-Trakt-Syncer/edit/main/README.md#windows-auto-running-a-file-on-login-once-per-day-or-hourly-using-task-scheduler-background-execution).
 
-## Windows: Creating a .bat File to Run Multiple Python Projects and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop
+## Windows: Creating a .bat File to Run Multiple Python Projects at Once and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop
 
 This guide will walk you through the steps to create a .bat file that can run multiple Python projects installed with path variables. Additionally, it includes optional steps for opening multiple programs and creating a shortcut with an icon for easy on-demand execution from the desktop.
 
