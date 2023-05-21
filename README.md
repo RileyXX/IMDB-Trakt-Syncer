@@ -46,6 +46,11 @@ _Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX
 5. Follow the prompts during the first run. You will need to enter your Trakt client ID and client secret from step 3, as well as your IMDB username and password. Please note that these details are saved insecurely as `credentials.txt` in the same folder as the script. It is recommended to change your IMDB password to something unique beforehand.
 6. Setup is complete. The script will continue running and syncing your ratings. You can monitor its progress in the command line.
 
+## For Setting Up Automation See the Following Sections:
+- Python Script to Update all Packages with Pip (Windows, Linux, Mac, ChromeOS, etc. [Link #1](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#python-script-to-update-all-packages-with-pip-windows-linux-mac-chromeos-etc)
+- Windows: Creating a .bat File to Run Multiple Python Projects and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop. [Link #2](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#windows-creating-a-bat-file-to-run-multiple-python-projects-and-optional-steps-for-opening-programs-and-creating-a-shortcut-to-run-on-demand-from-desktop)
+- Windows: Auto-Running a File on Login, Once per Day, or Hourly using Task Scheduler (Background Execution. [Link #3](https://github.com/RileyXX/IMDB-Trakt-Syncer/blob/main/README.md#windows-auto-running-a-file-on-login-once-per-day-or-hourly-using-task-scheduler-background-execution)
+
 ## Troubleshooting, Known Issues, Workarounds & Future Outlook
 - If IMDB requires a captcha on login, and you see "Not signed in" appear in the script, the captcha is likely the cause. To fix this, navigate to the IMDB website in your browser (preferably Chrome) from the same computer. If you're already logged in, log out and log back in. It may ask you to fill in a captcha. Complete the captcha and finish logging in. After successfully logging in on your browser, run the script again, and it should work. You may need to repeat this step once or twice if the issue persists. Adding a captcha solver to the script is being considered but not currently implemented. [Issue #2](https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2)
 - If you see an error about having the incorrect version of Chromedriver, uninstall it by running the following command in the command line: `python -m pip uninstall chromedriver-py`. In your Chrome browser, go to Settings > About Chrome and check the prefix for your version (e.g., 112... or 111). If the prefix matches your Chrome version, navigate to the [chromedriver-py releases page](https://pypi.org/project/chromedriver-py/#history) and find the latest version that matches the prefix for your Chrome version. Copy the version number you need (e.g 113.0.5672.63), then run the following command in the command line: `python -m pip install chromedriver-py==VERSION_NUMBER`. Replace `VERSION_NUMBER` with the version you copied and press enter. This will install the correct version of Chromedriver. Run the script again, and it should work. [Issue #16](https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/16)
@@ -95,7 +100,7 @@ if not outdated_packages:
 ```
 3. Run the file.
 4. (Optional) Edit the `ignored_packages` value to exclude packages and projects from auto-updating.
-5. (Optional) For automation on Windows, including auto-running a file on login, once per day, or hourly. See this [section](https://github.com/RileyXX/TMDB-Trakt-Syncer/edit/main/README.md#windows-auto-running-a-file-on-login-once-per-day-or-hourly-using-task-scheduler-background-execution).
+5. (Optional) For automation on Windows, including auto-running a file on login, once per day, or hourly. See this [section](https://github.com/RileyXX/IMDB-Trakt-Syncer/edit/main/README.md#windows-auto-running-a-file-on-login-once-per-day-or-hourly-using-task-scheduler-background-execution).
 
 ## Windows: Creating a .bat File to Run Multiple Python Projects and Optional Steps for Opening Programs and Creating a Shortcut to Run On Demand From Desktop
 
