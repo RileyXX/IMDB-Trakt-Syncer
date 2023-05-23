@@ -1,5 +1,4 @@
 import requests
-import time
 try:
     from IMDBTraktSyncer import errorHandling as EH
 except ImportError:
