@@ -6,7 +6,7 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -68,7 +68,7 @@ def main():
             else:
                 raise
 
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 10)
 
         driver.get('https://www.imdb.com/registration/signin')
 
@@ -105,19 +105,23 @@ def main():
             print("\nStopping script...")
             raise SystemExit
         
-        trakt_ratings, trakt_reviews = traktData.getTraktData()
-        imdb_ratings, imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
+        trakt_watchlist, trakt_ratings, trakt_reviews = traktData.getTraktData()
+        imdb_watchlist, imdb_ratings, imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
 
         #Get trakt and imdb ratings and filter out trakt ratings with missing imdb id
         trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None]
         imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None]
         trakt_reviews = [review for review in trakt_reviews if review['ID'] is not None]
         imdb_reviews = [review for review in imdb_reviews if review['ID'] is not None]
+        trakt_watchlist = [item for item in trakt_watchlist if item['ID'] is not None]
+        imdb_watchlist = [item for item in imdb_watchlist if item['ID'] is not None]
         #Filter out ratings already set
         imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
         trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
         imdb_reviews_to_set = [review for review in trakt_reviews if review['ID'] not in [imdb_review['ID'] for imdb_review in imdb_reviews]]
         trakt_reviews_to_set = [review for review in imdb_reviews if review['ID'] not in [trakt_review['ID'] for trakt_review in trakt_reviews]]
+        imdb_watchlist_to_set = [item for item in trakt_watchlist if item['ID'] not in [imdb_item['ID'] for imdb_item in imdb_watchlist]]
+        trakt_watchlist_to_set = [item for item in imdb_watchlist if item['ID'] not in [trakt_item['ID'] for trakt_item in trakt_watchlist]]
         # Remove duplicate reviews and filter by out any items for imdb_reviews_to_set where comment length is less than 600 characters
         def remove_duplicates_and_filter(lst, key, min_comment_length=None):
             seen = set()
@@ -130,6 +134,148 @@ def main():
 
         imdb_reviews_to_set = remove_duplicates_and_filter(imdb_reviews_to_set, 'ID', 600)
         trakt_reviews_to_set = remove_duplicates_and_filter(trakt_reviews_to_set, 'ID')
+        
+        # If sync_watchlist_value is true
+        if VC.sync_watchlist_value:
+            # Set Trakt Watchlist Items
+            if trakt_watchlist_to_set:
+                print('Setting Trakt Watchlist Items')
+
+                # Count the total number of items
+                num_items = len(trakt_watchlist_to_set)
+                item_count = 0
+
+                for item in trakt_watchlist_to_set:
+                    item_count += 1
+                    imdb_id = item['ID']
+                    media_type = item['Type']  # 'movie', 'show', or 'episode'
+
+                    url = f"https://api.trakt.tv/sync/watchlist"
+
+                    data = {
+                        "movies": [],
+                        "shows": [],
+                        "episodes": []
+                    }
+
+                    if media_type == 'movie':
+                        data['movies'].append({
+                            "ids": {
+                                "imdb": imdb_id
+                            }
+                        })
+                    elif media_type == 'show':
+                        data['shows'].append({
+                            "ids": {
+                                "imdb": imdb_id
+                            }
+                        })
+                    elif media_type == 'episode':
+                        data['episodes'].append({
+                            "ids": {
+                                "imdb": imdb_id
+                            }
+                        })
+
+                    response = EH.make_trakt_request(url, payload=data)
+                    if response:
+                        print(f"Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
+                    else:
+                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
+                        print("Error Response:", response.content, response.status_code)
+
+                print('Trakt Watchlist Items Set Successfully')
+            else:
+                print('No Trakt Watchlist Items To Set')
+
+            # Set IMDB Watchlist Items
+            if imdb_watchlist_to_set:
+                print('Setting IMDB Watchlist Items')
+                
+                # Count the total number of items
+                num_items = len(imdb_watchlist_to_set)
+                item_count = 0
+                
+                for item in imdb_watchlist_to_set:
+                    try:
+                        item_count += 1
+                        year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
+                        print(f"Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
+                        
+                        driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
+                                            
+                        watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                        
+                        # Check if item is already in watchlist otherwise skip it
+                        if 'ipc-icon--done' not in watchlist_button.get_attribute('innerHTML'):
+                            watchlist_button.click()
+                            time.sleep(1)
+                    except (NoSuchElementException, TimeoutException):
+                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['ID']})")
+                        pass
+
+                
+                print('Setting IMDB Watchlist Items Complete')
+            else:
+                print('No IMDB Watchlist Items To Set')
+
+        #Set Trakt Ratings
+        if trakt_ratings_to_set:
+            print('Setting Trakt Ratings')
+
+            # Set the API endpoints
+            rate_url = "https://api.trakt.tv/sync/ratings"
+            
+            # Count the total number of items
+            num_items = len(trakt_ratings_to_set)
+            item_count = 0
+                    
+            # Loop through your data table and rate each item on Trakt
+            for item in trakt_ratings_to_set:
+                item_count += 1
+                if item["Type"] == "show":
+                    # This is a TV show
+                    data = {
+                        "shows": [{
+                            "ids": {
+                                "imdb": item["ID"]
+                            },
+                            "rating": item["Rating"]
+                        }]
+                    }
+                    print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                elif item["Type"] == "movie":
+                    # This is a movie
+                    data = {
+                        "movies": [{
+                            "ids": {
+                                "imdb": item["ID"]
+                            },
+                            "rating": item["Rating"]
+                        }]
+                    }
+                    print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                elif item["Type"] == "episode":
+                    # This is an episode
+                    data = {
+                        "episodes": [{
+                            "ids": {
+                                "imdb": item["ID"]
+                            },
+                            "rating": item["Rating"]
+                        }]
+                    }
+                    print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+
+                # Make the API call to rate the item
+                response = EH.make_trakt_request(rate_url, payload=data)
+
+                if response is None:
+                    print(f"Error rating {item}: {response.content}")
+
+            print('Setting Trakt Ratings Complete')
+        else:
+            print('No Trakt Ratings To Set')
 
         #Set IMDB Ratings
         if imdb_ratings_to_set:
@@ -152,112 +298,21 @@ def main():
                         submit_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
                         submit_element.click()
                         time.sleep(1)
-                except:
+                except (NoSuchElementException, TimeoutException):
+                    print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["ID"]})')
                     pass
 
             print('Setting IMDB Ratings Complete')
         else:
             print('No IMDB Ratings To Set')
 
+        # If sync_reviews_value is true
         if VC.sync_reviews_value:
-            #Set Trakt Ratings
-            if trakt_ratings_to_set:
-                print('Setting Trakt Ratings')
-
-                # Set the API endpoints
-                rate_url = "https://api.trakt.tv/sync/ratings"
-                
-                # Count the total number of items to rate
-                num_items = len(trakt_ratings_to_set)
-                item_count = 0
-                        
-                # Loop through your data table and rate each item on Trakt
-                for item in trakt_ratings_to_set:
-                    item_count += 1
-                    if item["Type"] == "show":
-                        # This is a TV show
-                        data = {
-                            "shows": [{
-                                "ids": {
-                                    "imdb": item["ID"]
-                                },
-                                "rating": item["Rating"]
-                            }]
-                        }
-                        print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                    elif item["Type"] == "movie":
-                        # This is a movie
-                        data = {
-                            "movies": [{
-                                "ids": {
-                                    "imdb": item["ID"]
-                                },
-                                "rating": item["Rating"]
-                            }]
-                        }
-                        print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                    elif item["Type"] == "episode":
-                        # This is an episode
-                        data = {
-                            "episodes": [{
-                                "ids": {
-                                    "imdb": item["ID"]
-                                },
-                                "rating": item["Rating"]
-                            }]
-                        }
-                        print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-
-                    # Make the API call to rate the item
-                    response = EH.make_trakt_request(rate_url, payload=data)
-
-                    if response is None:
-                        print(f"Error rating {item}: {response.content}")
-
-                print('Setting Trakt Ratings Complete')
-            else:
-                print('No Trakt Ratings To Set')
-            
-            if imdb_reviews_to_set:
-                # Call the check_last_run() function
-                if VC.check_imdb_reviews_last_submitted():
-                    print('Setting IMDB Reviews')
-                    
-                    for review in imdb_reviews_to_set:
-                    
-                        driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
-                        
-                        review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
-                        review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
-                        
-                        review_title_input.send_keys("My Review")
-                        review_input.send_keys(review["Comment"])
-                        
-                        no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
-                        yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
-                        
-                        if review["Spoiler"]:
-                            yes_element.click()                        
-                        else:
-                            no_element.click()
-                                                
-                        submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
-
-                        submit_button.click()
-                        
-                        time.sleep(1)
-                    
-                    print('Setting IMDB Reviews Complete')
-                else:
-                    print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
-            else:
-                print('No IMDB Reviews To Set')
-
             # Set Trakt Reviews
             if trakt_reviews_to_set:
                 print('Setting Trakt Reviews')
 
-                # Count the total number of items to rate
+                # Count the total number of items
                 num_items = len(trakt_reviews_to_set)
                 item_count = 0
 
@@ -302,6 +357,51 @@ def main():
                 print('Trakt Reviews Set Successfully')
             else:
                 print('No Trakt Reviews To Set')
+
+            # Set IMDB Reviews
+            if imdb_reviews_to_set:
+                # Call the check_last_run() function
+                if VC.check_imdb_reviews_last_submitted():
+                    print('Setting IMDB Reviews')
+                    
+                    # Count the total number of items
+                    num_items = len(trakt_reviews_to_set)
+                    item_count = 0
+                    
+                    for review in imdb_reviews_to_set:
+                        item_count += 1
+                        try:
+                            print(f"Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
+                            driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
+                            
+                            review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
+                            review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
+                            
+                            review_title_input.send_keys("My Review")
+                            review_input.send_keys(review["Comment"])
+                            
+                            no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
+                            yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                            
+                            if review["Spoiler"]:
+                                yes_element.click()                        
+                            else:
+                                no_element.click()
+                                                    
+                            submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+
+                            submit_button.click()
+                            
+                            time.sleep(1)
+                        except (NoSuchElementException, TimeoutException):
+                            print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['ID']})")
+                            pass
+                    
+                    print('Setting IMDB Reviews Complete')
+                else:
+                    print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
+            else:
+                print('No IMDB Reviews To Set')
 
         #Close web driver
         print("Closing webdriver...")

@@ -9,13 +9,38 @@ except ImportError:
 
 def getTraktData():
     # Process Trakt Ratings and Comments
-    print('Processing Trakt Ratings and Comments')
+    print('Processing Trakt Data')
 
     response = EH.make_trakt_request('https://api.trakt.tv/users/me')
     json_data = json.loads(response.text)
     username_slug = json_data['ids']['slug']
     encoded_username = urllib.parse.quote(username_slug)
-    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/ratings')
+    
+    # Get Trakt Watchlist Items
+    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/watchlist?sort=added,asc')
+    json_data = json.loads(response.text)
+
+    trakt_watchlist = []
+
+    for item in json_data:
+        if item['type'] == 'movie':
+            movie = item.get('movie')
+            movie_id = movie.get('ids', {}).get('imdb')
+            trakt_watchlist.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'ID': movie_id, 'Type': 'movie'})
+        elif item['type'] == 'show':
+            show = item.get('show')
+            show_id = show.get('ids', {}).get('imdb')
+            trakt_watchlist.append({'Title': show.get('title'), 'Year': show.get('year'), 'ID': show_id, 'Type': 'show'})
+        elif item['type'] == 'episode':
+            show = item.get('show')
+            show_title = show.get('title')
+            episode = item.get('episode')
+            episode_id = episode.get('ids', {}).get('imdb')
+            episode_title = f'{show_title}: {episode.get("title")}'
+            trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'ID': episode_id, 'Type': 'episode'})
+    
+    # Get Trakt Ratings
+    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/ratings?sort=newest')
     json_data = json.loads(response.text)
 
     movie_ratings = []
@@ -42,7 +67,7 @@ def getTraktData():
     trakt_ratings = movie_ratings + show_ratings + episode_ratings
 
     # Get Trakt Comments
-    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/comments')
+    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/comments?sort=newest')
     json_data = json.loads(response.text)
     total_pages = response.headers.get('X-Pagination-Page-Count')
     trakt_comments = []
@@ -96,6 +121,6 @@ def getTraktData():
                 'Type': comment_type
             })
 
-    print('Processing Trakt Ratings and Comments Complete')
+    print('Processing Trakt Data Complete')
 
-    return trakt_ratings, trakt_comments
+    return trakt_watchlist, trakt_ratings, trakt_comments

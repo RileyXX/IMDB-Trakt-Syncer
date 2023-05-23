@@ -59,6 +59,55 @@ else:
     with open(file_path, "w") as f:
         json.dump(values, f)
 
+
+def prompt_sync_watchlist():
+    # Define the file path
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+
+    # Check if credentials file exists
+    try:
+        with open(file_path, 'r') as file:
+            credentials = json.load(file)
+            sync_watchlist_value = credentials.get('sync_watchlist')
+            if sync_watchlist_value is not None:
+                return sync_watchlist_value
+    except FileNotFoundError:
+        pass
+
+    while True:
+        # Prompt the user for input
+        print("Do you want to sync watchlists? (y/n)")
+        user_input = input("Enter your choice: ")
+
+        # Validate user input
+        if user_input.lower() == 'y':
+            sync_watchlist_value = True
+            break
+        elif user_input.lower() == 'n':
+            sync_watchlist_value = False
+            break
+        else:
+            # Invalid input, ask again
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+    # Update the value in the JSON file
+    credentials = {}
+    try:
+        with open(file_path, 'r') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        pass
+
+    credentials['sync_watchlist'] = sync_watchlist_value
+
+    with open(file_path, 'w') as file:
+        json.dump(credentials, file)
+
+    # return true or false
+    return sync_watchlist_value
+sync_watchlist_value = prompt_sync_watchlist()
+
 # Last run function, used to determine when the last time IMDB reviews were submitted    
 def check_imdb_reviews_last_submitted():
     # Load credentials from credentials.txt
