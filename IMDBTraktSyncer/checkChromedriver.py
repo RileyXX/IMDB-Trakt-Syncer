@@ -2,6 +2,7 @@ import feedparser
 import subprocess
 import pkg_resources
 import platform
+import sys
 
 def get_chrome_version():
     system = platform.system()
@@ -38,17 +39,17 @@ def get_chrome_version():
     return None
 
 def install_chromedriver(version):
-    # Install the chromedriver-py package using pip
-    subprocess.run(['pip', 'install', f'chromedriver-py=={version}'])
+    # Install the chromedriver-py package using the Python interpreter
+    subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir' f'chromedriver-py=={version}'])
 
 def install_chromedriver_fallback_method():
     print("Using install chromedriver-py fallback method")
-    # Install the chromedriver-py package using pip
+    # Install the chromedriver-py package using the Python interpreter
     feed = feedparser.parse('https://pypi.org/rss/project/chromedriver-py/releases.xml')
     # Get the second latest release version
     version = feed.entries[1].title.split()[-1]
     # Install the chromedriver-py package using pip
-    subprocess.run(['pip', 'install', f'chromedriver-py=={version}'])
+    subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir' f'chromedriver-py=={version}'])
 
 # Check if chromedriver-py is already installed
 try:
