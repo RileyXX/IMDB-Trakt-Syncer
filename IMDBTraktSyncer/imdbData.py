@@ -43,14 +43,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     year = row[10]
                     imdb_id = row[1]
                     if "tvSeries" in row[7] or "tvMiniSeries" in row[7]:
-                        type = "show"
+                        media_type = "show"
                     elif "tvEpisode" in row[7]:
-                        type = "episode"
+                        media_type = "episode"
                     elif "movie" in row[7]:
-                        type = "movie"
+                        media_type = "movie"
                     else:
-                        type = "unknown"
-                    imdb_watchlist.append({'Title': title, 'Year': year, 'ID': imdb_id, 'Type': type})
+                        media_type = "unknown"
+                    imdb_watchlist.append({'Title': title, 'Year': year, 'ID': imdb_id, 'Type': media_type})
         except FileNotFoundError:
             print('Ratings file not found')
             
@@ -92,14 +92,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     rating = row[1]
                     imdb_id = row[0]
                     if "tvSeries" in row[5] or "tvMiniSeries" in row[5]:
-                        type = "show"
+                        media_type = "show"
                     elif "tvEpisode" in row[5]:
-                        type = "episode"
+                        media_type = "episode"
                     elif "movie" in row[5]:
-                        type = "movie"
+                        media_type = "movie"
                     else:
-                        type = "unknown"
-                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id, 'Type': type})
+                        media_type = "unknown"
+                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id, 'Type': media_type})
         except FileNotFoundError:
             print('Ratings file not found')
             
@@ -128,12 +128,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     reviews_link.click()
 
     reviews = []
-
+    errors_found_getting_imdb_reviews = False
     while True:
         try:
-            review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
-            if not review_elements:
-                break  # No review elements found, exit the loop
+            try:
+                review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+            except (NoSuchElementException, TimeoutException):
+                # No review elements found. There are no reviews. Exit the loop without an error.
+                break
             
             for element in review_elements:
                 review = {}
@@ -169,13 +171,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
 
             except (NoSuchElementException, TimeoutException):
-                break  # "Next" link not found or timed out waiting for the 'Next' link, exit the loop
+                break  # "Next" link not found or timed out waiting for the 'Next' link, exit the loop without error.
         except Exception as e:
-            print(f"Exception occurred: {e}")
+            errors_found_getting_imdb_reviews = True
+            print(f"Exception occurred while getting IMDB reviews: {type(e)}")
             break
 
     imdb_reviews = reviews
 
     print('Processing IMDB Data Complete')
     
-    return imdb_watchlist, imdb_ratings, imdb_reviews
+    return imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews
