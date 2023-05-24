@@ -106,16 +106,16 @@ def main():
             raise SystemExit
         
         trakt_watchlist, trakt_ratings, trakt_reviews = traktData.getTraktData()
-        imdb_watchlist, imdb_ratings, imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
+        imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
 
-        #Get trakt and imdb ratings and filter out trakt ratings with missing imdb id
-        trakt_ratings = [rating for rating in trakt_ratings if rating['ID'] is not None]
-        imdb_ratings = [rating for rating in imdb_ratings if rating['ID'] is not None]
-        trakt_reviews = [review for review in trakt_reviews if review['ID'] is not None]
-        imdb_reviews = [review for review in imdb_reviews if review['ID'] is not None]
-        trakt_watchlist = [item for item in trakt_watchlist if item['ID'] is not None]
-        imdb_watchlist = [item for item in imdb_watchlist if item['ID'] is not None]
-        #Filter out ratings already set
+        #Get trakt and imdb data and filter out items with missing imdb id
+        trakt_ratings = [rating for rating in trakt_ratings if rating.get('ID') is not None]
+        imdb_ratings = [rating for rating in imdb_ratings if rating.get('ID') is not None]
+        trakt_reviews = [review for review in trakt_reviews if review.get('ID') is not None]
+        imdb_reviews = [review for review in imdb_reviews if review.get('ID') is not None]
+        trakt_watchlist = [item for item in trakt_watchlist if item.get('ID') is not None]
+        imdb_watchlist = [item for item in imdb_watchlist if item.get('ID') is not None]
+        #Filter out items already set
         imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
         trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
         imdb_reviews_to_set = [review for review in trakt_reviews if review['ID'] not in [imdb_review['ID'] for imdb_review in imdb_reviews]]
@@ -308,100 +308,104 @@ def main():
 
         # If sync_reviews_value is true
         if VC.sync_reviews_value:
-            # Set Trakt Reviews
-            if trakt_reviews_to_set:
-                print('Setting Trakt Reviews')
+            # Check if there was an error getting IMDB reviews
+            if not errors_found_getting_imdb_reviews:
+                # Set Trakt Reviews
+                if trakt_reviews_to_set:
+                    print('Setting Trakt Reviews')
 
-                # Count the total number of items
-                num_items = len(trakt_reviews_to_set)
-                item_count = 0
-
-                for review in trakt_reviews_to_set:
-                    item_count += 1
-                    imdb_id = review['ID']
-                    comment = review['Comment']
-                    media_type = review['Type']  # 'movie', 'show', or 'episode'
-
-                    url = f"https://api.trakt.tv/comments"
-
-                    data = {
-                        "comment": comment
-                    }
-
-                    if media_type == 'movie':
-                        data['movie'] = {
-                            "ids": {
-                                "imdb": imdb_id
-                            }
-                        }
-                    elif media_type == 'show':
-                        data['show'] = {
-                            "ids": {
-                                "imdb": imdb_id
-                            }
-                        }
-                    elif media_type == 'episode':
-                        data['episode'] = {
-                            "ids": {
-                                "imdb": episode_id
-                            }
-                        }
-                    
-                    response = EH.make_trakt_request(url, payload=data)
-                    if response:
-                        print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
-                    else:
-                        print(f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
-                        print("Error Response:", response.content, response.status_code)
-
-                print('Trakt Reviews Set Successfully')
-            else:
-                print('No Trakt Reviews To Set')
-
-            # Set IMDB Reviews
-            if imdb_reviews_to_set:
-                # Call the check_last_run() function
-                if VC.check_imdb_reviews_last_submitted():
-                    print('Setting IMDB Reviews')
-                    
                     # Count the total number of items
                     num_items = len(trakt_reviews_to_set)
                     item_count = 0
-                    
-                    for review in imdb_reviews_to_set:
-                        item_count += 1
-                        try:
-                            print(f"Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
-                            driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
-                            
-                            review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
-                            review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
-                            
-                            review_title_input.send_keys("My Review")
-                            review_input.send_keys(review["Comment"])
-                            
-                            no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
-                            yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
-                            
-                            if review["Spoiler"]:
-                                yes_element.click()                        
-                            else:
-                                no_element.click()
-                                                    
-                            submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
 
-                            submit_button.click()
-                            
-                            time.sleep(1)
-                        except (NoSuchElementException, TimeoutException):
-                            print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['ID']})")
-                            pass
-                    
-                    print('Setting IMDB Reviews Complete')
+                    for review in trakt_reviews_to_set:
+                        item_count += 1
+                        imdb_id = review['ID']
+                        comment = review['Comment']
+                        media_type = review['Type']  # 'movie', 'show', or 'episode'
+
+                        url = f"https://api.trakt.tv/comments"
+
+                        data = {
+                            "comment": comment
+                        }
+
+                        if media_type == 'movie':
+                            data['movie'] = {
+                                "ids": {
+                                    "imdb": imdb_id
+                                }
+                            }
+                        elif media_type == 'show':
+                            data['show'] = {
+                                "ids": {
+                                    "imdb": imdb_id
+                                }
+                            }
+                        elif media_type == 'episode':
+                            data['episode'] = {
+                                "ids": {
+                                    "imdb": episode_id
+                                }
+                            }
+                        
+                        response = EH.make_trakt_request(url, payload=data)
+                        if response:
+                            print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                        else:
+                            print(f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                            print("Error Response:", response.content, response.status_code)
+
+                    print('Trakt Reviews Set Successfully')
                 else:
-                    print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
+                    print('No Trakt Reviews To Set')
+
+                # Set IMDB Reviews
+                if imdb_reviews_to_set:
+                    # Call the check_last_run() function
+                    if VC.check_imdb_reviews_last_submitted():
+                        print('Setting IMDB Reviews')
+                        
+                        # Count the total number of items
+                        num_items = len(trakt_reviews_to_set)
+                        item_count = 0
+                        
+                        for review in imdb_reviews_to_set:
+                            item_count += 1
+                            try:
+                                print(f"Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
+                                driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
+                                
+                                review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
+                                review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
+                                
+                                review_title_input.send_keys("My Review")
+                                review_input.send_keys(review["Comment"])
+                                
+                                no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
+                                yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                                
+                                if review["Spoiler"]:
+                                    yes_element.click()                        
+                                else:
+                                    no_element.click()
+                                                        
+                                submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+
+                                submit_button.click()
+                                
+                                time.sleep(1)
+                            except (NoSuchElementException, TimeoutException):
+                                print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['ID']})")
+                                pass
+                        
+                        print('Setting IMDB Reviews Complete')
+                    else:
+                        print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
+                else:
+                    print('No IMDB Reviews To Set')
             else:
-                print('No IMDB Reviews To Set')
+                print('There was an error getting IMDB reviews. See exception. Skipping reviews submissions.')
 
         #Close web driver
         print("Closing webdriver...")
