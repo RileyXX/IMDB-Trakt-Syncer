@@ -367,7 +367,7 @@ def main():
                         print('Setting IMDB Reviews')
                         
                         # Count the total number of items
-                        num_items = len(trakt_reviews_to_set)
+                        num_items = len(imdb_reviews_to_set)
                         item_count = 0
                         
                         for review in imdb_reviews_to_set:
@@ -394,7 +394,7 @@ def main():
 
                                 submit_button.click()
                                 
-                                time.sleep(1)
+                                time.sleep(3) # wait for rating to submit
                             except (NoSuchElementException, TimeoutException):
                                 print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['ID']})")
                                 pass

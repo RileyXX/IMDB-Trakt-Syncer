@@ -119,11 +119,11 @@ def check_imdb_reviews_last_submitted():
 
     imdb_reviews_last_submitted_date_str = credentials.get('imdb_reviews_last_submitted_date')
 
-    # If imdb_reviews_last_submitted_date is not available or not in the correct format, consider it as 7 days ago
-    imdb_reviews_last_submitted_date = datetime.datetime.strptime(imdb_reviews_last_submitted_date_str, '%Y-%m-%d %H:%M:%S') if imdb_reviews_last_submitted_date_str else datetime.datetime.now() - datetime.timedelta(hours=168)
+    # If imdb_reviews_last_submitted_date is not available or not in the correct format, consider it as 10 days ago
+    imdb_reviews_last_submitted_date = datetime.datetime.strptime(imdb_reviews_last_submitted_date_str, '%Y-%m-%d %H:%M:%S') if imdb_reviews_last_submitted_date_str else datetime.datetime.now() - datetime.timedelta(hours=240)
 
-    # Check if 168 hours have passed since the last run
-    if datetime.datetime.now() - imdb_reviews_last_submitted_date >= datetime.timedelta(hours=168):
+    # Check if 240 hours have passed since the last run
+    if datetime.datetime.now() - imdb_reviews_last_submitted_date >= datetime.timedelta(hours=240):
         # Update the imdb_reviews_last_submitted_date with the current time
         credentials['imdb_reviews_last_submitted_date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
