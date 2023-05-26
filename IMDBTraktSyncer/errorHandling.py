@@ -1,5 +1,6 @@
 import traceback
 import requests
+import time
 try:
     from IMDBTraktSyncer import verifyCredentials as VC
 except ImportError:
