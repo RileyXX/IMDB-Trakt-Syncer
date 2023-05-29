@@ -24,6 +24,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         driver.get('https://www.imdb.com/list/watchlist')
 
         csv_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".export a")))
+        driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
         csv_link.click()
 
         #Wait for csv download to complete
@@ -68,10 +69,10 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     try:
         driver.get('https://www.imdb.com/list/ratings')
 
-        dropdown = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".circle")))
+        dropdown = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".circle")))
         dropdown.click()
 
-        csv_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".pop-up-menu-list-items a.pop-up-menu-list-item-link")))
+        csv_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".pop-up-menu-list-items a.pop-up-menu-list-item-link")))
         csv_link.click()
 
         #Wait for csv download to complete
@@ -124,7 +125,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
 
     #Get IMDB Reviews
     driver.get('https://www.imdb.com/profile')
-    reviews_link = driver.find_element(By.CSS_SELECTOR, "div.aux-content-widget-2 div.subNavItem a[href*='comments-index']")
+    reviews_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.aux-content-widget-2 div.subNavItem a[href*='comments-index']")))
     reviews_link.click()
 
     reviews = []
