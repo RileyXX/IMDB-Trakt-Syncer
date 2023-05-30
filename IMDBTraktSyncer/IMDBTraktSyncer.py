@@ -43,6 +43,7 @@ def main():
         options.add_argument("--headless=new")
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
         options.add_experimental_option("prefs", {"download.default_directory": directory, "download.directory_upgrade": True, "download.prompt_for_download": False, "credentials_enable_service": False, "profile.password_manager_enabled": False})
+        options.add_argument('--window-size=1920,1080')
         options.add_argument("--disable-save-password-bubble")
         options.add_argument("--disable-infobars")
         options.add_argument("--disable-autofill-for-password-fields")
@@ -69,7 +70,7 @@ def main():
                 raise
 
         wait = WebDriverWait(driver, 10)
-
+        
         driver.get('https://www.imdb.com/registration/signin')
 
         # wait for sign in link to appear and then click it
@@ -82,7 +83,7 @@ def main():
         password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
         email_input.send_keys(imdb_username)
         password_input.send_keys(imdb_password)
-        submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='submit']")))
+        submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
         submit_button.click()
 
         time.sleep(2)
@@ -195,7 +196,7 @@ def main():
                 # Count the total number of items
                 num_items = len(imdb_watchlist_to_set)
                 item_count = 0
-                
+                                
                 for item in imdb_watchlist_to_set:
                     try:
                         item_count += 1
@@ -203,12 +204,17 @@ def main():
                         print(f"Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
                         
                         driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
-                                            
+                        
+                        # Scroll the page to bring the element into view
                         watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                        driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                        
+                        # Wait for the element to be clickable
+                        watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
                         
                         # Check if item is already in watchlist otherwise skip it
                         if 'ipc-icon--done' not in watchlist_button.get_attribute('innerHTML'):
-                            watchlist_button.click()
+                            driver.execute_script("arguments[0].click();", watchlist_button)
                             time.sleep(1)
                     except (NoSuchElementException, TimeoutException):
                         print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['ID']})")
@@ -286,16 +292,20 @@ def main():
                 year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
                 print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
                 driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
+                
+                # Wait until rate button is located and scroll to it
+                button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                driver.execute_script("arguments[0].scrollIntoView(true);", button)
 
                 # click on "Rate" button and select rating option, then submit rating
-                button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-btn span')))
+                button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                 try:
                     element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
                     if element_rating_bar:
                         driver.execute_script("arguments[0].click();", button)
-                        rating_option_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                        rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
                         driver.execute_script("arguments[0].click();", rating_option_element)
-                        submit_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                        submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
                         submit_element.click()
                         time.sleep(1)
                 except (NoSuchElementException, TimeoutException):
@@ -382,15 +392,15 @@ def main():
                                 review_title_input.send_keys("My Review")
                                 review_input.send_keys(review["Comment"])
                                 
-                                no_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
-                                yes_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                                no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
+                                yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
                                 
                                 if review["Spoiler"]:
                                     yes_element.click()                        
                                 else:
                                     no_element.click()
                                                         
-                                submit_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+                                submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
 
                                 submit_button.click()
                                 
@@ -401,7 +411,7 @@ def main():
                         
                         print('Setting IMDB Reviews Complete')
                     else:
-                        print('IMDB reviews were submitted within the last 7 days. Skipping IMDB review submission.')
+                        print('IMDB reviews were submitted within the last 10 days. Skipping IMDB review submission.')
                 else:
                     print('No IMDB Reviews To Set')
             else:
