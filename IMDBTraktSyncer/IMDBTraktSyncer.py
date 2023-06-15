@@ -106,35 +106,46 @@ def main():
             print("\nStopping script...")
             raise SystemExit
         
-        trakt_watchlist, trakt_ratings, trakt_reviews = traktData.getTraktData()
+        trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
         imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
 
-        #Get trakt and imdb data and filter out items with missing imdb id
-        trakt_ratings = [rating for rating in trakt_ratings if rating.get('ID') is not None]
-        imdb_ratings = [rating for rating in imdb_ratings if rating.get('ID') is not None]
-        trakt_reviews = [review for review in trakt_reviews if review.get('ID') is not None]
-        imdb_reviews = [review for review in imdb_reviews if review.get('ID') is not None]
-        trakt_watchlist = [item for item in trakt_watchlist if item.get('ID') is not None]
-        imdb_watchlist = [item for item in imdb_watchlist if item.get('ID') is not None]
-        #Filter out items already set
-        imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['ID'] not in [imdb_rating['ID'] for imdb_rating in imdb_ratings]]
-        trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['ID'] not in [trakt_rating['ID'] for trakt_rating in trakt_ratings]]
-        imdb_reviews_to_set = [review for review in trakt_reviews if review['ID'] not in [imdb_review['ID'] for imdb_review in imdb_reviews]]
-        trakt_reviews_to_set = [review for review in imdb_reviews if review['ID'] not in [trakt_review['ID'] for trakt_review in trakt_reviews]]
-        imdb_watchlist_to_set = [item for item in trakt_watchlist if item['ID'] not in [imdb_item['ID'] for imdb_item in imdb_watchlist]]
-        trakt_watchlist_to_set = [item for item in imdb_watchlist if item['ID'] not in [trakt_item['ID'] for trakt_item in trakt_watchlist]]
-        # Remove duplicate reviews and filter by out any items for imdb_reviews_to_set where comment length is less than 600 characters
-        def remove_duplicates_and_filter(lst, key, min_comment_length=None):
-            seen = set()
+        # Get trakt and imdb data and filter out items with missing imdb id
+        trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
+        imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
+        trakt_reviews = [review for review in trakt_reviews if review.get('IMDB_ID') is not None]
+        imdb_reviews = [review for review in imdb_reviews if review.get('IMDB_ID') is not None]
+        trakt_watchlist = [item for item in trakt_watchlist if item.get('IMDB_ID') is not None]
+        imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
+        # Filter out items already set
+        imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['IMDB_ID'] not in [imdb_rating['IMDB_ID'] for imdb_rating in imdb_ratings]]
+        trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['IMDB_ID'] not in [trakt_rating['IMDB_ID'] for trakt_rating in trakt_ratings]]
+        imdb_reviews_to_set = [review for review in trakt_reviews if review['IMDB_ID'] not in [imdb_review['IMDB_ID'] for imdb_review in imdb_reviews]]
+        trakt_reviews_to_set = [review for review in imdb_reviews if review['IMDB_ID'] not in [trakt_review['IMDB_ID'] for trakt_review in trakt_reviews]]
+        imdb_watchlist_to_set = [item for item in trakt_watchlist if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watchlist]]
+        trakt_watchlist_to_set = [item for item in imdb_watchlist if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watchlist]]
+        # Filter out items where the comment length is less than 600 characters
+        def filter_by_comment_length(lst, min_comment_length=None):
             result = []
             for item in lst:
-                if item[key] not in seen and (min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length)):
-                    seen.add(item[key])
+                if min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length):
                     result.append(item)
             return result
-
-        imdb_reviews_to_set = remove_duplicates_and_filter(imdb_reviews_to_set, 'ID', 600)
-        trakt_reviews_to_set = remove_duplicates_and_filter(trakt_reviews_to_set, 'ID')
+        imdb_reviews_to_set = filter_by_comment_length(imdb_reviews_to_set, 600)
+        
+        # If remove_watched_from_watchlists_value is true
+        if VC.remove_watched_from_watchlists_value:        
+            # Get the IDs from watched_content
+            watched_content_ids = set(item['IMDB_ID'] for item in watched_content if item['IMDB_ID'])
+                    
+            # Filter out watched content from trakt_watchlist_to_set
+            trakt_watchlist_to_set = [item for item in trakt_watchlist_to_set if item['IMDB_ID'] not in watched_content_ids]
+            # Filter out watched content from trakt_watchlist_to_set
+            imdb_watchlist_to_set = [item for item in imdb_watchlist_to_set if item['IMDB_ID'] not in watched_content_ids]
+            
+            # Find items to remove from trakt_watchlist
+            trakt_watchlist_items_to_remove = [item for item in trakt_watchlist if item['IMDB_ID'] in watched_content_ids]
+            # Find items to remove from imdb_watchlist
+            imdb_watchlist_items_to_remove = [item for item in imdb_watchlist if item['IMDB_ID'] in watched_content_ids]
         
         # If sync_watchlist_value is true
         if VC.sync_watchlist_value:
@@ -148,7 +159,7 @@ def main():
 
                 for item in trakt_watchlist_to_set:
                     item_count += 1
-                    imdb_id = item['ID']
+                    imdb_id = item['IMDB_ID']
                     media_type = item['Type']  # 'movie', 'show', or 'episode'
 
                     url = f"https://api.trakt.tv/sync/watchlist"
@@ -203,7 +214,7 @@ def main():
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
                         print(f"Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
                         
-                        driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
+                        driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
                         
                         # Scroll the page to bring the element into view
                         watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
@@ -214,10 +225,20 @@ def main():
                         
                         # Check if item is already in watchlist otherwise skip it
                         if 'ipc-icon--done' not in watchlist_button.get_attribute('innerHTML'):
-                            driver.execute_script("arguments[0].click();", watchlist_button)
-                            time.sleep(1)
+                            retry_count = 0
+                            while retry_count < 2:
+                                driver.execute_script("arguments[0].click();", watchlist_button)
+                                try:
+                                    WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--done')))
+                                    break  # Break the loop if successful
+                                except TimeoutException:
+                                    retry_count += 1
+
+                            if retry_count == 2:
+                                print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
+                        
                     except (NoSuchElementException, TimeoutException):
-                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['ID']})")
+                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                         pass
 
                 
@@ -244,7 +265,7 @@ def main():
                     data = {
                         "shows": [{
                             "ids": {
-                                "imdb": item["ID"]
+                                "imdb": item["IMDB_ID"]
                             },
                             "rating": item["Rating"]
                         }]
@@ -255,7 +276,7 @@ def main():
                     data = {
                         "movies": [{
                             "ids": {
-                                "imdb": item["ID"]
+                                "imdb": item["IMDB_ID"]
                             },
                             "rating": item["Rating"]
                         }]
@@ -266,7 +287,7 @@ def main():
                     data = {
                         "episodes": [{
                             "ids": {
-                                "imdb": item["ID"]
+                                "imdb": item["IMDB_ID"]
                             },
                             "rating": item["Rating"]
                         }]
@@ -291,7 +312,7 @@ def main():
             for i, item in enumerate(imdb_ratings_to_set, 1):
                 year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
                 print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
-                driver.get(f'https://www.imdb.com/title/{item["ID"]}/')
+                driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
                 
                 # Wait until rate button is located and scroll to it
                 button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
@@ -309,7 +330,7 @@ def main():
                         submit_element.click()
                         time.sleep(1)
                 except (NoSuchElementException, TimeoutException):
-                    print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["ID"]})')
+                    print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
                     pass
 
             print('Setting IMDB Ratings Complete')
@@ -330,7 +351,7 @@ def main():
 
                     for review in trakt_reviews_to_set:
                         item_count += 1
-                        imdb_id = review['ID']
+                        imdb_id = review['IMDB_ID']
                         comment = review['Comment']
                         media_type = review['Type']  # 'movie', 'show', or 'episode'
 
@@ -384,7 +405,7 @@ def main():
                             item_count += 1
                             try:
                                 print(f"Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
-                                driver.get(f'https://contribute.imdb.com/review/{review["ID"]}/add?bus=imdb')
+                                driver.get(f'https://contribute.imdb.com/review/{review["IMDB_ID"]}/add?bus=imdb')
                                 
                                 review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
                                 review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
@@ -406,7 +427,7 @@ def main():
                                 
                                 time.sleep(3) # wait for rating to submit
                             except (NoSuchElementException, TimeoutException):
-                                print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['ID']})")
+                                print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})")
                                 pass
                         
                         print('Setting IMDB Reviews Complete')
@@ -417,6 +438,110 @@ def main():
             else:
                 print('There was an error getting IMDB reviews. See exception. Skipping reviews submissions.')
 
+        # If remove_watched_from_watchlists_value is true
+        if VC.remove_watched_from_watchlists_value:
+            
+            # Remove Watched Items Trakt Watchlist
+            if trakt_watchlist_items_to_remove:
+                print('Removing Watched Items From Trakt Watchlist')
+
+                # Set the API endpoint
+                remove_url = "https://api.trakt.tv/sync/watchlist/remove"
+
+                # Count the total number of items
+                num_items = len(trakt_watchlist_items_to_remove)
+                item_count = 0
+
+                # Loop through the items to remove from the watchlist
+                for item in trakt_watchlist_items_to_remove:
+                    item_count += 1
+                    if item["Type"] == "show":
+                        # This is a TV show
+                        data = {
+                            "shows": [{
+                                "ids": {
+                                    "trakt": item["TraktID"]
+                                }
+                            }]
+                        }
+                        print(f"Removing TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                    elif item["Type"] == "movie":
+                        # This is a movie
+                        data = {
+                            "movies": [{
+                                "ids": {
+                                    "trakt": item["TraktID"]
+                                }
+                            }]
+                        }
+                        print(f"Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                    elif item["Type"] == "episode":
+                        # This is an episode
+                        data = {
+                            "episodes": [{
+                                "ids": {
+                                    "trakt": item["TraktID"]
+                                }
+                            }]
+                        }
+                        print(f"Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+
+                    # Make the API call to remove the item from the watchlist
+                    response = EH.make_trakt_request(remove_url, payload=data)
+
+                    if response is None:
+                        print(f"Error removing {item}: {response.content}")
+
+                print('Removing Watched Items From Trakt Watchlist Complete')
+            else:
+                print('No Watched Items To Remove From Trakt Watchlist')
+
+            # Remove Watched Items IMDB Watchlist
+            if imdb_watchlist_items_to_remove:
+                print('Removing Watched Items From IMDB Watchlist')
+                
+                # Count the total number of items
+                num_items = len(imdb_watchlist_items_to_remove)
+                item_count = 0
+                                
+                for item in imdb_watchlist_items_to_remove:
+                    try:
+                        item_count += 1
+                        year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
+                        print(f"Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist")
+                        
+                        driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                        
+                        # Scroll the page to bring the element into view
+                        watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                        driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                        
+                        # Wait for the element to be clickable
+                        watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                        
+                        # Check if item is not in watchlist otherwise skip it
+                        if 'ipc-icon--add' not in watchlist_button.get_attribute('innerHTML'):
+                            retry_count = 0
+                            while retry_count < 2:
+                                driver.execute_script("arguments[0].click();", watchlist_button)
+                                try:
+                                    WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--add')))
+                                    break  # Break the loop if successful
+                                except TimeoutException:
+                                    retry_count += 1
+
+                            if retry_count == 2:
+                                print(f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+
+                    except (NoSuchElementException, TimeoutException):
+                        print(f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+                        pass
+
+                
+                print('Removing Watched Items From IMDB Watchlist Complete')
+            else:
+                print('No Watched Items To Remove From IMDB Watchlist')
+        
         #Close web driver
         print("Closing webdriver...")
         driver.quit()
