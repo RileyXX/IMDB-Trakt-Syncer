@@ -36,7 +36,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         here = os.path.abspath(os.path.dirname(__file__))
         watchlist_path = os.path.join(here, 'WATCHLIST.csv')
         try:
-            with open(watchlist_path, 'r') as file:
+            with open(watchlist_path, 'r', encoding='utf-8') as file:
                 reader = csv.reader(file)
                 header = next(reader)  # skip the header row
                 for row in reader:
@@ -51,7 +51,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    imdb_watchlist.append({'Title': title, 'Year': year, 'ID': imdb_id, 'Type': media_type})
+                    imdb_watchlist.append({'Title': title, 'Year': year, 'IMDB_ID': imdb_id, 'Type': media_type})
         except FileNotFoundError:
             print('Ratings file not found')
             
@@ -84,7 +84,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         here = os.path.abspath(os.path.dirname(__file__))
         ratings_path = os.path.join(here, 'ratings.csv')
         try:
-            with open(ratings_path, 'r') as file:
+            with open(ratings_path, 'r', encoding='utf-8') as file:
                 reader = csv.reader(file)
                 header = next(reader)  # skip the header row
                 for row in reader:
@@ -100,7 +100,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'ID': imdb_id, 'Type': media_type})
+                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'IMDB_ID': imdb_id, 'Type': media_type})
         except FileNotFoundError:
             print('Ratings file not found')
             
@@ -143,13 +143,13 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 # Extract review details
                 review['Title'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").text
                 review['Year'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header span").text.strip('()').split('–')[0].strip()
-                review['ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
+                review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
                 review['IMDBReviewID'] = element.get_attribute("data-review-id")
                 review['Comment'] = element.find_element(By.CSS_SELECTOR, ".content > .text").text.strip()
                 spoiler_warning_elements = element.find_elements(By.CSS_SELECTOR, ".spoiler-warning")
                 review['Spoiler'] = len(spoiler_warning_elements) > 0
                 # Get the media type using Trakt API
-                media_type = get_media_type(review['ID'])
+                media_type = get_media_type(review['IMDB_ID'])
                 if media_type:
                     review['Type'] = media_type
                 else:
@@ -178,7 +178,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
             print(f"Exception occurred while getting IMDB reviews: {type(e)}")
             break
 
-    imdb_reviews = reviews
+    # Filter out duplicate reviews for the same item based on ID
+    filtered_reviews = []
+    seen = set()
+    for item in reviews:
+        if item['IMDB_ID'] not in seen:
+            seen.add(item['IMDB_ID'])
+            filtered_reviews.append(item)
+    imdb_reviews = filtered_reviews
 
     print('Processing IMDB Data Complete')
     
