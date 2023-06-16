@@ -245,102 +245,107 @@ def main():
                 print('Setting IMDB Watchlist Items Complete')
             else:
                 print('No IMDB Watchlist Items To Set')
-
-        #Set Trakt Ratings
-        if trakt_ratings_to_set:
-            print('Setting Trakt Ratings')
-
-            # Set the API endpoints
-            rate_url = "https://api.trakt.tv/sync/ratings"
+         
+        # If sync_ratings_value is true
+        if VC.sync_ratings_value:
             
-            # Count the total number of items
-            num_items = len(trakt_ratings_to_set)
-            item_count = 0
-                    
-            # Loop through your data table and rate each item on Trakt
-            for item in trakt_ratings_to_set:
-                item_count += 1
-                if item["Type"] == "show":
-                    # This is a TV show
-                    data = {
-                        "shows": [{
-                            "ids": {
-                                "imdb": item["IMDB_ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                elif item["Type"] == "movie":
-                    # This is a movie
-                    data = {
-                        "movies": [{
-                            "ids": {
-                                "imdb": item["IMDB_ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
-                elif item["Type"] == "episode":
-                    # This is an episode
-                    data = {
-                        "episodes": [{
-                            "ids": {
-                                "imdb": item["IMDB_ID"]
-                            },
-                            "rating": item["Rating"]
-                        }]
-                    }
-                    print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+            #Set Trakt Ratings
+            if trakt_ratings_to_set:
+                print('Setting Trakt Ratings')
 
-                # Make the API call to rate the item
-                response = EH.make_trakt_request(rate_url, payload=data)
-
-                if response is None:
-                    print(f"Error rating {item}: {response.content}")
-
-            print('Setting Trakt Ratings Complete')
-        else:
-            print('No Trakt Ratings To Set')
-
-        #Set IMDB Ratings
-        if imdb_ratings_to_set:
-            print('Setting IMDB Ratings')
-
-            # loop through each movie and TV show rating and submit rating on IMDB website
-            for i, item in enumerate(imdb_ratings_to_set, 1):
-                year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
-                driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                # Set the API endpoints
+                rate_url = "https://api.trakt.tv/sync/ratings"
                 
-                try:
-                    # Wait until rate button is located and scroll to it
-                    button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                    driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                # Count the total number of items
+                num_items = len(trakt_ratings_to_set)
+                item_count = 0
+                        
+                # Loop through your data table and rate each item on Trakt
+                for item in trakt_ratings_to_set:
+                    item_count += 1
+                    if item["Type"] == "show":
+                        # This is a TV show
+                        data = {
+                            "shows": [{
+                                "ids": {
+                                    "imdb": item["IMDB_ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                    elif item["Type"] == "movie":
+                        # This is a movie
+                        data = {
+                            "movies": [{
+                                "ids": {
+                                    "imdb": item["IMDB_ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                    elif item["Type"] == "episode":
+                        # This is an episode
+                        data = {
+                            "episodes": [{
+                                "ids": {
+                                    "imdb": item["IMDB_ID"]
+                                },
+                                "rating": item["Rating"]
+                            }]
+                        }
+                        print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
-                    # click on "Rate" button and select rating option, then submit rating
-                    button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                    element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
-                    if element_rating_bar:
-                        driver.execute_script("arguments[0].click();", button)
-                        rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
-                        driver.execute_script("arguments[0].click();", rating_option_element)
-                        submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                        submit_element.click()
-                        time.sleep(1)
-                except (NoSuchElementException, TimeoutException):
-                    print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
-                    pass
+                    # Make the API call to rate the item
+                    response = EH.make_trakt_request(rate_url, payload=data)
 
-            print('Setting IMDB Ratings Complete')
-        else:
-            print('No IMDB Ratings To Set')
+                    if response is None:
+                        print(f"Error rating {item}: {response.content}")
+
+                print('Setting Trakt Ratings Complete')
+            else:
+                print('No Trakt Ratings To Set')
+
+            # Set IMDB Ratings
+            if imdb_ratings_to_set:
+                print('Setting IMDB Ratings')
+
+                # loop through each movie and TV show rating and submit rating on IMDB website
+                for i, item in enumerate(imdb_ratings_to_set, 1):
+                    year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
+                    print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
+                    driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                    
+                    try:
+                        # Wait until rate button is located and scroll to it
+                        button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                        driver.execute_script("arguments[0].scrollIntoView(true);", button)
+
+                        # click on "Rate" button and select rating option, then submit rating
+                        button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                        element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
+                        if element_rating_bar:
+                            driver.execute_script("arguments[0].click();", button)
+                            rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                            driver.execute_script("arguments[0].click();", rating_option_element)
+                            submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                            submit_element.click()
+                            time.sleep(1)
+                    except (NoSuchElementException, TimeoutException):
+                        print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
+                        pass
+
+                print('Setting IMDB Ratings Complete')
+            else:
+                print('No IMDB Ratings To Set')
 
         # If sync_reviews_value is true
         if VC.sync_reviews_value:
+            
             # Check if there was an error getting IMDB reviews
             if not errors_found_getting_imdb_reviews:
+                
                 # Set Trakt Reviews
                 if trakt_reviews_to_set:
                     print('Setting Trakt Reviews')
