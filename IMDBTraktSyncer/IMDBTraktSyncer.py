@@ -314,13 +314,13 @@ def main():
                 print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
                 driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
                 
-                # Wait until rate button is located and scroll to it
-                button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                driver.execute_script("arguments[0].scrollIntoView(true);", button)
-
-                # click on "Rate" button and select rating option, then submit rating
-                button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                 try:
+                    # Wait until rate button is located and scroll to it
+                    button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                    driver.execute_script("arguments[0].scrollIntoView(true);", button)
+
+                    # click on "Rate" button and select rating option, then submit rating
+                    button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                     element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
                     if element_rating_bar:
                         driver.execute_script("arguments[0].click();", button)

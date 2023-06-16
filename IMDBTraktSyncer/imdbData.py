@@ -125,58 +125,63 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
 
     #Get IMDB Reviews
     driver.get('https://www.imdb.com/profile')
-    reviews_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.aux-content-widget-2 div.subNavItem a[href*='comments-index']")))
-    reviews_link.click()
-
     reviews = []
     errors_found_getting_imdb_reviews = False
-    while True:
-        try:
+    try:
+        reviews_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.aux-content-widget-2 div.subNavItem a[href*='comments-index']")))
+        reviews_link.click()
+
+        while True:
             try:
-                review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
-            except (NoSuchElementException, TimeoutException):
-                # No review elements found. There are no reviews. Exit the loop without an error.
-                break
-            
-            for element in review_elements:
-                review = {}
-                # Extract review details
-                review['Title'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").text
-                review['Year'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header span").text.strip('()').split('–')[0].strip()
-                review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
-                review['IMDBReviewID'] = element.get_attribute("data-review-id")
-                review['Comment'] = element.find_element(By.CSS_SELECTOR, ".content > .text").text.strip()
-                spoiler_warning_elements = element.find_elements(By.CSS_SELECTOR, ".spoiler-warning")
-                review['Spoiler'] = len(spoiler_warning_elements) > 0
-                # Get the media type using Trakt API
-                media_type = get_media_type(review['IMDB_ID'])
-                if media_type:
-                    review['Type'] = media_type
-                else:
-                    review['Type'] = 'unknown'
-
-                reviews.append(review)
-
-            try:
-                # Check if "Next" link exists
-                next_link = driver.find_element(By.CSS_SELECTOR, "a.next-page")
-                if next_link.get_attribute("href") == "#":
-                    break  # No more pages, exit the loop
-
-                next_link.click()
-
-                # Wait until the URL changes
-                wait.until(EC.url_changes(current_url))
+                try:
+                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+                except (NoSuchElementException, TimeoutException):
+                    # No review elements found. There are no reviews. Exit the loop without an error.
+                    break
                 
-                # Refresh review_elements
-                review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+                for element in review_elements:
+                    review = {}
+                    # Extract review details
+                    review['Title'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").text
+                    review['Year'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header span").text.strip('()').split('–')[0].strip()
+                    review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
+                    review['IMDBReviewID'] = element.get_attribute("data-review-id")
+                    review['Comment'] = element.find_element(By.CSS_SELECTOR, ".content > .text").text.strip()
+                    spoiler_warning_elements = element.find_elements(By.CSS_SELECTOR, ".spoiler-warning")
+                    review['Spoiler'] = len(spoiler_warning_elements) > 0
+                    # Get the media type using Trakt API
+                    media_type = get_media_type(review['IMDB_ID'])
+                    if media_type:
+                        review['Type'] = media_type
+                    else:
+                        review['Type'] = 'unknown'
 
-            except (NoSuchElementException, TimeoutException):
-                break  # "Next" link not found or timed out waiting for the 'Next' link, exit the loop without error.
-        except Exception as e:
-            errors_found_getting_imdb_reviews = True
-            print(f"Exception occurred while getting IMDB reviews: {type(e)}")
-            break
+                    reviews.append(review)
+
+                try:
+                    # Check if "Next" link exists
+                    next_link = driver.find_element(By.CSS_SELECTOR, "a.next-page")
+                    if next_link.get_attribute("href") == "#":
+                        break  # No more pages, exit the loop
+
+                    next_link.click()
+
+                    # Wait until the URL changes
+                    wait.until(EC.url_changes(current_url))
+                    
+                    # Refresh review_elements
+                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+
+                except (NoSuchElementException, TimeoutException):
+                    break  # "Next" link not found or timed out waiting for the 'Next' link, exit the loop without error.
+            except Exception as e:
+                errors_found_getting_imdb_reviews = True
+                print(f"Exception occurred while getting IMDB reviews: {type(e)}")
+                break
+    
+    except Exception as e:
+        errors_found_getting_imdb_reviews = True
+        print(f"Exception occurred while getting IMDB reviews: {type(e)}")
 
     # Filter out duplicate reviews for the same item based on ID
     filtered_reviews = []
