@@ -1,5 +1,9 @@
 import requests
 import time
+try:
+    from IMDBTraktSyncer import errorLogger as EL
+except ImportError:
+    import errorLogger as EL
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=3):
     retry_delay = 5  # seconds between retries
@@ -27,7 +31,9 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             print(f"Request failed with exception: {e}")
             return None
 
-    print("Max retry attempts reached with Trakt API, request failed.")
+    error_message = "Max retry attempts reached with Trakt API, request failed."
+    print(f"{error_message}")
+    EL.logger.error(error_message)
     return None
 
 def get_trakt_message(status_code):

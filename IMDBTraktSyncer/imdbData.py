@@ -12,8 +12,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from chromedriver_py import binary_path
 try:
     from IMDBTraktSyncer import errorHandling as EH
+    from IMDBTraktSyncer import errorLogger as EL
 except ImportError:
     import errorHandling as EH
+    import errorLogger as EL
+
+class PageLoadException(Exception):
+    pass
 
 def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     # Process IMDB Ratings Reviews & Watchlist
@@ -21,7 +26,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     
     #Get IMDB Watchlist Items
     try:
-        driver.get('https://www.imdb.com/list/watchlist')
+        # Load page
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/watchlist', driver)
+        if not success:
+            # Page failed to load, raise an exception
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         csv_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".export a")))
         driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
@@ -53,7 +62,9 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "unknown"
                     imdb_watchlist.append({'Title': title, 'Year': year, 'IMDB_ID': imdb_id, 'Type': media_type})
         except FileNotFoundError:
-            print('Ratings file not found')
+            error_message = "Ratings file not found"
+            print(f"{error_message}")
+            EL.logger.error(error_message, exc_info=True)
             
         # Delete csv files
         for file in os.listdir(directory):
@@ -67,7 +78,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     
     # Get IMDB Ratings
     try:
-        driver.get('https://www.imdb.com/list/ratings')
+        # Load page
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/ratings', driver)
+        if not success:
+            # Page failed to load, raise an exception
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         dropdown = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".circle")))
         dropdown.click()
@@ -111,6 +126,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     except (NoSuchElementException, TimeoutException):
         # No IMDB Ratings
         imdb_ratings = []
+        error_message = "No IMDB Ratings"
+        EL.logger.error(error_message, exc_info=True)
         pass
             
     def get_media_type(imdb_id):
@@ -124,7 +141,13 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         return None
 
     #Get IMDB Reviews
-    driver.get('https://www.imdb.com/profile')
+    
+    # Load page
+    success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/profile', driver)
+    if not success:
+        # Page failed to load, raise an exception
+        raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+    
     reviews = []
     errors_found_getting_imdb_reviews = False
     try:
@@ -137,6 +160,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
                 except (NoSuchElementException, TimeoutException):
                     # No review elements found. There are no reviews. Exit the loop without an error.
+                    error_message = "No review elements found. There are no reviews. Exit the loop without an error."
+                    EL.logger.error(error_message, exc_info=True)
                     break
                 
                 for element in review_elements:
@@ -173,15 +198,22 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
 
                 except (NoSuchElementException, TimeoutException):
-                    break  # "Next" link not found or timed out waiting for the 'Next' link, exit the loop without error.
+                    # "Next" link not found or timed out waiting for the "Next" link, exit the loop without error.
+                    error_message = '"Next" link not found or timed out waiting for the "Next" link, exit the loop without error.'
+                    EL.logger.error(error_message, exc_info=True)
+                    break
             except Exception as e:
                 errors_found_getting_imdb_reviews = True
-                print(f"Exception occurred while getting IMDB reviews: {type(e)}")
+                error_message = f"Exception occurred while getting IMDB reviews: {type(e)}"
+                print(f"{error_message}")
+                EL.logger.error(error_message, exc_info=True)
                 break
     
     except Exception as e:
         errors_found_getting_imdb_reviews = True
-        print(f"Exception occurred while getting IMDB reviews: {type(e)}")
+        error_message = f"Exception occurred while getting IMDB reviews: {type(e)}"
+        print(f"{error_message}")
+        EL.logger.error(error_message, exc_info=True)
 
     # Filter out duplicate reviews for the same item based on ID
     filtered_reviews = []

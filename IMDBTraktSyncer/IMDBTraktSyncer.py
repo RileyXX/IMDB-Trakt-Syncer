@@ -17,14 +17,18 @@ try:
     from IMDBTraktSyncer import traktData
     from IMDBTraktSyncer import imdbData
     from IMDBTraktSyncer import errorHandling as EH
+    from IMDBTraktSyncer import errorLogger as EL
 except ImportError:
     import checkChromedriver
     import verifyCredentials as VC
     import traktData
     import imdbData
     import errorHandling as EH
+    import errorLogger as EL
 from chromedriver_py import binary_path
 
+class PageLoadException(Exception):
+    pass
 
 def main():
     try:
@@ -65,13 +69,18 @@ def main():
                 extract_message = error_message.split("Stacktrace:")[0].replace("Message: session not created:", "").strip()
                 print(f"Error: {extract_message}")
                 print("See this link for details on how to fix: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/16")
+                EL.logger.error(extract_message, exc_info=True)
                 raise SystemExit
             else:
                 raise
 
         wait = WebDriverWait(driver, 10)
         
-        driver.get('https://www.imdb.com/registration/signin')
+        # Load sign in page
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver)
+        if not success:
+            # Page failed to load, raise an exception
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         # wait for sign in link to appear and then click it
         sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
@@ -89,7 +98,10 @@ def main():
         time.sleep(2)
 
         # go to IMDB homepage
-        driver.get('https://www.imdb.com/')
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver)
+        if not success:
+            # Page failed to load, raise an exception
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         time.sleep(2)
 
@@ -104,6 +116,7 @@ def main():
             print("\nIf your IMDB login is incorrect, simply edit the credentials.txt file with the correct login or delete the credentials file and run the script again.")
             print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
             print("\nStopping script...")
+            EL.logger.error("Error: Not signed in to IMDB")
             raise SystemExit
         
         trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
@@ -191,10 +204,11 @@ def main():
 
                     response = EH.make_trakt_request(url, payload=data)
                     if response:
-                        print(f"Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
+                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
                     else:
-                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
-                        print("Error Response:", response.content, response.status_code)
+                        error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist"
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message)
 
                 print('Setting Trakt Watchlist Items Complete')
             else:
@@ -212,9 +226,16 @@ def main():
                     try:
                         item_count += 1
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                        print(f"Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
+                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
                         
-                        driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                        # Load page
+                        success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver)
+                        if not success:
+                            # Page failed to load, raise an exception
+                            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+                        
+                        # Wait until the loader has disappeared, indicating the watchlist button has loaded
+                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
                         
                         # Scroll the page to bring the element into view
                         watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
@@ -235,10 +256,14 @@ def main():
                                     retry_count += 1
 
                             if retry_count == 2:
-                                print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
+                                error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
+                                print(f"   - {error_message}")
+                                EL.logger.error(error_message)
                         
-                    except (NoSuchElementException, TimeoutException):
-                        print(f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
+                    except (NoSuchElementException, TimeoutException, PageLoadException):
+                        error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message, exc_info=True)
                         pass
 
                 
@@ -273,7 +298,7 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f"Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
                     elif item["Type"] == "movie":
                         # This is a movie
                         data = {
@@ -284,7 +309,7 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f"Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
                     elif item["Type"] == "episode":
                         # This is an episode
                         data = {
@@ -295,13 +320,15 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f"Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
 
                     # Make the API call to rate the item
                     response = EH.make_trakt_request(rate_url, payload=data)
 
                     if response is None:
-                        print(f"Error rating {item}: {response.content}")
+                        error_message = f"Failed rating {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt"
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message)
 
                 print('Setting Trakt Ratings Complete')
             else:
@@ -313,11 +340,20 @@ def main():
 
                 # loop through each movie and TV show rating and submit rating on IMDB website
                 for i, item in enumerate(imdb_ratings_to_set, 1):
+
                     year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                    print(f'Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
-                    driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                    print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
                     
                     try:
+                        # Load page
+                        success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver)
+                        if not success:
+                            # Page failed to load, raise an exception
+                            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+                        
+                        # Wait until the rating bar has loaded
+                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__loading"]')))
+                        
                         # Wait until rate button is located and scroll to it
                         button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                         driver.execute_script("arguments[0].scrollIntoView(true);", button)
@@ -332,8 +368,10 @@ def main():
                             submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
                             submit_element.click()
                             time.sleep(1)
-                    except (NoSuchElementException, TimeoutException):
-                        print(f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
+                    except (NoSuchElementException, TimeoutException, PageLoadException):
+                        error_message = f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message, exc_info=True)
                         pass
 
                 print('Setting IMDB Ratings Complete')
@@ -387,10 +425,11 @@ def main():
                         
                         response = EH.make_trakt_request(url, payload=data)
                         if response:
-                            print(f"Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                            print(f" - Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
                         else:
-                            print(f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
-                            print("Error Response:", response.content, response.status_code)
+                            error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt"
+                            print(f"   - {error_message}")
+                            EL.logger.error(error_message)
 
                     print('Trakt Reviews Set Successfully')
                 else:
@@ -409,8 +448,13 @@ def main():
                         for review in imdb_reviews_to_set:
                             item_count += 1
                             try:
-                                print(f"Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
-                                driver.get(f'https://contribute.imdb.com/review/{review["IMDB_ID"]}/add?bus=imdb')
+                                print(f" - Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
+                                
+                                # Load page
+                                success, status_code, url = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{review["IMDB_ID"]}/add?bus=imdb', driver)
+                                if not success:
+                                    # Page failed to load, raise an exception
+                                    raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                                 
                                 review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
                                 review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
@@ -431,8 +475,10 @@ def main():
                                 submit_button.click()
                                 
                                 time.sleep(3) # wait for rating to submit
-                            except (NoSuchElementException, TimeoutException):
-                                print(f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})")
+                            except (NoSuchElementException, TimeoutException, PageLoadException):
+                                error_message = f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})"
+                                print(f"   - {error_message}")
+                                EL.logger.error(error_message, exc_info=True)
                                 pass
                         
                         print('Setting IMDB Reviews Complete')
@@ -469,7 +515,7 @@ def main():
                                 }
                             }]
                         }
-                        print(f"Removing TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
                     elif item["Type"] == "movie":
                         # This is a movie
                         data = {
@@ -479,7 +525,7 @@ def main():
                                 }
                             }]
                         }
-                        print(f"Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
                     elif item["Type"] == "episode":
                         # This is an episode
                         data = {
@@ -489,13 +535,15 @@ def main():
                                 }
                             }]
                         }
-                        print(f"Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
 
                     # Make the API call to remove the item from the watchlist
                     response = EH.make_trakt_request(remove_url, payload=data)
 
                     if response is None:
-                        print(f"Error removing {item}: {response.content}")
+                        error_message = f"Error removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message)
 
                 print('Removing Watched Items From Trakt Watchlist Complete')
             else:
@@ -513,9 +561,16 @@ def main():
                     try:
                         item_count += 1
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                        print(f"Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist")
+                        print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist")
                         
-                        driver.get(f'https://www.imdb.com/title/{item["IMDB_ID"]}/')
+                        # Load page
+                        success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver)
+                        if not success:
+                            # Page failed to load, raise an exception
+                            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+                        
+                        # Wait until the loader has disappeared, indicating the watchlist button has loaded
+                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
                         
                         # Scroll the page to bring the element into view
                         watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
@@ -536,10 +591,14 @@ def main():
                                     retry_count += 1
 
                             if retry_count == 2:
-                                print(f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+                                error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
+                                print(f"   - {error_message}")
+                                EL.logger.error(error_message)
 
-                    except (NoSuchElementException, TimeoutException):
-                        print(f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+                    except (NoSuchElementException, TimeoutException, PageLoadException):
+                        error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
+                        print(f"   - {error_message}")
+                        EL.logger.error(error_message, exc_info=True)
                         pass
 
                 
@@ -555,6 +614,7 @@ def main():
     except Exception as e:
         error_message = "An error occurred while running the script."
         EH.report_error(error_message)
+        EL.logger.error(error_message, exc_info=True)
 
 if __name__ == '__main__':
     main()

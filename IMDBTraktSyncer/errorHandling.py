@@ -1,10 +1,19 @@
 import traceback
 import requests
 import time
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 try:
     from IMDBTraktSyncer import verifyCredentials as VC
+    from IMDBTraktSyncer import errorLogger as EL
 except ImportError:
     import verifyCredentials as VC
+    import errorLogger as EL
+
+class PageLoadException(Exception):
+    pass
 
 def report_error(error_message):
     github_issue_url = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/new?template=bug_report.yml"
@@ -51,15 +60,21 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
                 retry_delay *= 2  # Exponential backoff for retries
             else:
                 # Handle other status codes as needed
-                error_message = get_trakt_message(response.status_code)
-                print(f"Request failed with status code {response.status_code}: {error_message}")
+                status_message = get_trakt_message(response.status_code)
+                error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                print(f"   - {error_message}")
+                EL.logger.error(f"{error_message}. URL: {url}")
                 return None
 
         except requests.exceptions.RequestException as e:
-            print(f"Request failed with exception: {e}")
+            error_message = f"Request failed with exception: {e}"
+            print(f"   - {error_message}")
+            EL.logger.error(error_message, exc_info=True)
             return None
 
-    print("Max retry attempts reached with Trakt API, request failed.")
+    error_message = "Max retry attempts reached with Trakt API, request failed."
+    print(f"   - {error_message}")
+    EL.logger.error(error_message)
     return None
 
 def get_trakt_message(status_code):
@@ -89,3 +104,51 @@ def get_trakt_message(status_code):
     }
 
     return error_messages.get(status_code, "Unknown error")
+
+# Function to get page with retries and adjusted wait time
+def get_page_with_retries(url, driver, total_wait_time=180, initial_wait_time=5):
+    num_retries = total_wait_time // initial_wait_time
+    wait_time = total_wait_time / num_retries
+    max_retries = num_retries
+    status_code = None
+
+    for retry in range(max_retries):
+        try:
+            driver.get(url)
+            
+            # Wait until the page has finished loading
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+            
+            # Get the HTTP status code of the page using JavaScript
+            status_code = driver.execute_script(
+                """
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', window.location.href, false);
+                xhr.send(null);
+                return xhr.status;
+                """
+            )
+
+            # Check for any error codes
+            if status_code is None:
+                return True, status_code, url  # Unable to determine page loaded status
+            elif status_code >= 400:
+                raise PageLoadException(f'Failed to load page. Status code: {status_code}. URL: {url}')
+            else:
+                return True, status_code, url  # Page loaded successfully
+
+        except (PageLoadException) as e:
+            print(f"   - Error: {str(e)}")
+            retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
+            if retry + 1 < max_retries and status_code in retryable_error_codes:
+                seconds_left = int((max_retries - retry) * wait_time)
+                print(f"   - Retrying ({retry + 1}/{max_retries}) {seconds_left} seconds remaining...")
+                time.sleep(wait_time)
+            else:
+                error_message = f"Max retries reached or not retrying: {e}"
+                EL.logger.error(error_message, exc_info=True)
+                # Max retries reached or not retrying
+                return False, status_code, url
+
+    # All retries failed and page was not loaded successfully, return False
+    return False, None, url
