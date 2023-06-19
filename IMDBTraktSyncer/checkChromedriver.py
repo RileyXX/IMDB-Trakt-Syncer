@@ -3,6 +3,10 @@ import subprocess
 import pkg_resources
 import platform
 import sys
+try:
+    from IMDBTraktSyncer import errorLogger as EL
+except ImportError:
+    import errorLogger as EL
 
 def get_chrome_version():
     system = platform.system()

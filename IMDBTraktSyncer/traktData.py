@@ -5,8 +5,10 @@ import urllib.parse
 import datetime
 try:
     from IMDBTraktSyncer import errorHandling as EH
+    from IMDBTraktSyncer import errorLogger as EL
 except ImportError:
     import errorHandling as EH
+    import errorLogger as EL
 
 def getTraktData():
     # Process Trakt Ratings and Comments
