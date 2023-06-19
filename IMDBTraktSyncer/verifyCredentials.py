@@ -174,6 +174,9 @@ def prompt_sync_watchlist():
 
 # Last run function, used to determine when the last time IMDB reviews were submitted    
 def check_imdb_reviews_last_submitted():
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+    
     # Load credentials from credentials.txt
     if os.path.exists(file_path):
         with open(file_path, 'r', encoding='utf-8') as file:
