@@ -2,7 +2,6 @@ import os
 import json
 import requests
 import time
-import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -38,9 +37,7 @@ def main():
         imdb_password = VC.imdb_password
         
         directory = os.path.dirname(os.path.realpath(__file__))
-        
-        logging.getLogger('selenium.webdriver').setLevel(logging.WARNING)
-        
+                
         #Start web driver
         print('Starting webdriver...')
         options = Options()

@@ -1,5 +1,7 @@
+import os
 import logging
 import traceback
+import selenium.webdriver
 from logging.handlers import RotatingFileHandler
 
 class CustomFormatter(logging.Formatter):
@@ -23,8 +25,11 @@ class CustomFormatter(logging.Formatter):
             message = super().format(record)
             return f"{'`' * 100}\n{message}\n{'`' * 100}\n"
 
+# Get the directory of the script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
 # Set up the logging configuration
-log_file = 'log.txt'
+log_file = os.path.join(script_dir, 'log.txt')
 max_file_size = 1024 * 1024  # 1 MB
 backup_count = 0  # Set to 0 for only one log file
 
@@ -39,3 +44,6 @@ handler.setFormatter(formatter)
 # Get the root logger and add the handler
 logger = logging.getLogger('')
 logger.addHandler(handler)
+
+# Set the logging level for selenium.webdriver to WARNING
+logging.getLogger('selenium.webdriver').setLevel(logging.WARNING)
