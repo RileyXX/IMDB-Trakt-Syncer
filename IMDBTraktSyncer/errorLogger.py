@@ -44,6 +44,3 @@ handler.setFormatter(formatter)
 # Get the root logger and add the handler
 logger = logging.getLogger('')
 logger.addHandler(handler)
-
-# Set the logging level for selenium.webdriver to WARNING
-logging.getLogger('selenium.webdriver').setLevel(logging.WARNING)
