@@ -1,10 +1,14 @@
 import traceback
 import requests
 import time
-from selenium.common.exceptions import WebDriverException
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import SessionNotCreatedException
 try:
     from IMDBTraktSyncer import verifyCredentials as VC
     from IMDBTraktSyncer import errorLogger as EL
@@ -106,7 +110,7 @@ def get_trakt_message(status_code):
     return error_messages.get(status_code, "Unknown error")
 
 # Function to get page with retries and adjusted wait time
-def get_page_with_retries(url, driver, total_wait_time=180, initial_wait_time=5):
+def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_time=5):
     num_retries = total_wait_time // initial_wait_time
     wait_time = total_wait_time / num_retries
     max_retries = num_retries
@@ -117,7 +121,7 @@ def get_page_with_retries(url, driver, total_wait_time=180, initial_wait_time=5)
             driver.get(url)
             
             # Wait until the page has finished loading
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
             
             # Get the HTTP status code of the page using JavaScript
             status_code = driver.execute_script(

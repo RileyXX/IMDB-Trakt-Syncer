@@ -9,6 +9,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import SessionNotCreatedException
 from chromedriver_py import binary_path
 try:
     from IMDBTraktSyncer import errorHandling as EH
@@ -27,7 +28,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     #Get IMDB Watchlist Items
     try:
         # Load page
-        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/watchlist', driver)
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/watchlist', driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -79,7 +80,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     # Get IMDB Ratings
     try:
         # Load page
-        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/ratings', driver)
+        success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/list/ratings', driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -143,7 +144,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     #Get IMDB Reviews
     
     # Load page
-    success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/profile', driver)
+    success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/profile', driver, wait)
     if not success:
         # Page failed to load, raise an exception
         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -197,9 +198,14 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     # Refresh review_elements
                     review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
 
-                except (NoSuchElementException, TimeoutException):
-                    # "Next" link not found or timed out waiting for the "Next" link, exit the loop without error.
-                    error_message = '"Next" link not found or timed out waiting for the "Next" link, exit the loop without error.'
+                except NoSuchElementException:
+                    # "Next" link not found on IMDB reviews page, exit the loop without error
+                    error_message = '"Next" link not found on IMDB reviews page. Exiting the loop without error.'
+                    EL.logger.warning(error_message, exc_info=True)
+                    break
+                except TimeoutException:
+                    # Timed out waiting for URL change or next page review elements on IMDB reviews page
+                    error_message = 'Timed out waiting for URL change or next page review elements on IMDB reviews page. Exiting the loop without error.'
                     EL.logger.error(error_message, exc_info=True)
                     break
             except Exception as e:
