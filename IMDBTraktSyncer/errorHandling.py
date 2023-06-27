@@ -120,19 +120,16 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
         try:
             driver.get(url)
             
-            # Wait until the page has finished loading
-            wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+            # Wait until the status code becomes available
+            wait.until(lambda driver: driver.execute_script(
+                "return window.performance.getEntries().length > 0 && window.performance.getEntries()[0].responseStatus !== undefined"
+            ))
             
             # Get the HTTP status code of the page using JavaScript
             status_code = driver.execute_script(
-                """
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', window.location.href, false);
-                xhr.send(null);
-                return xhr.status;
-                """
+                "return window.performance.getEntries()[0].responseStatus;"
             )
-
+            
             # Check for any error codes
             if status_code is None:
                 return True, status_code, url  # Unable to determine page loaded status

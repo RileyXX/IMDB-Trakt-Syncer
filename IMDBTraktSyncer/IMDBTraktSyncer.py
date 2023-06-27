@@ -169,6 +169,7 @@ def main():
 
                 for item in trakt_watchlist_to_set:
                     item_count += 1
+                    print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
                     imdb_id = item['IMDB_ID']
                     media_type = item['Type']  # 'movie', 'show', or 'episode'
 
@@ -200,9 +201,8 @@ def main():
                         })
 
                     response = EH.make_trakt_request(url, payload=data)
-                    if response:
-                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
-                    else:
+                    
+                    if response is None:
                         error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist"
                         print(f"   - {error_message}")
                         EL.logger.error(error_message)
@@ -391,6 +391,7 @@ def main():
 
                     for review in trakt_reviews_to_set:
                         item_count += 1
+                        print(f" - Submitting comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
                         imdb_id = review['IMDB_ID']
                         comment = review['Comment']
                         media_type = review['Type']  # 'movie', 'show', or 'episode'
@@ -421,9 +422,8 @@ def main():
                             }
                         
                         response = EH.make_trakt_request(url, payload=data)
-                        if response:
-                            print(f" - Submitted comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
-                        else:
+                        
+                        if response is None:
                             error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt"
                             print(f"   - {error_message}")
                             EL.logger.error(error_message)
@@ -538,7 +538,7 @@ def main():
                     response = EH.make_trakt_request(remove_url, payload=data)
 
                     if response is None:
-                        error_message = f"Error removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
+                        error_message = f"Failed removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
                         print(f"   - {error_message}")
                         EL.logger.error(error_message)
 
