@@ -189,11 +189,15 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     next_link = driver.find_element(By.CSS_SELECTOR, "a.next-page")
                     if next_link.get_attribute("href") == "#":
                         break  # No more pages, exit the loop
-
+                    
+                    # Get the current url before clicking the "Next" link
+                    current_url = driver.current_url
+                    
+                    # Click the "Next" link
                     next_link.click()
 
                     # Wait until the URL changes
-                    wait.until(EC.url_changes(current_url))
+                    wait.until(lambda driver: driver.current_url != current_url)
                     
                     # Refresh review_elements
                     review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
