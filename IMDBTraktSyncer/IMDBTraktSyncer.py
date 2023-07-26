@@ -114,6 +114,8 @@ def main():
             print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
             print("\nStopping script...")
             EL.logger.error("Error: Not signed in to IMDB")
+            driver.quit()
+            service.stop()
             raise SystemExit
         
         trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
@@ -231,31 +233,45 @@ def main():
                             # Page failed to load, raise an exception
                             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                         
-                        # Wait until the loader has disappeared, indicating the watchlist button has loaded
-                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
+                        current_url = driver.current_url
                         
-                        # Scroll the page to bring the element into view
-                        watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
-                        driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
-                        
-                        # Wait for the element to be clickable
-                        watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
-                        
-                        # Check if item is already in watchlist otherwise skip it
-                        if 'ipc-icon--done' not in watchlist_button.get_attribute('innerHTML'):
-                            retry_count = 0
-                            while retry_count < 2:
-                                driver.execute_script("arguments[0].click();", watchlist_button)
-                                try:
-                                    WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--done')))
-                                    break  # Break the loop if successful
-                                except TimeoutException:
-                                    retry_count += 1
+                        # Check if the URL doesn't contain "/reference"
+                        if "/reference" not in current_url:
+                            # Wait until the loader has disappeared, indicating the watchlist button has loaded
+                            wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
+                            
+                            # Scroll the page to bring the element into view
+                            watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                            
+                            # Wait for the element to be clickable
+                            watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                            
+                            # Check if item is already in watchlist otherwise skip it
+                            if 'ipc-icon--done' not in watchlist_button.get_attribute('innerHTML'):
+                                retry_count = 0
+                                while retry_count < 2:
+                                    driver.execute_script("arguments[0].click();", watchlist_button)
+                                    try:
+                                        WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--done')))
+                                        break  # Break the loop if successful
+                                    except TimeoutException:
+                                        retry_count += 1
 
-                            if retry_count == 2:
-                                error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
-                                print(f"   - {error_message}")
-                                EL.logger.error(error_message)
+                                if retry_count == 2:
+                                    error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
+                                    print(f"   - {error_message}")
+                                    EL.logger.error(error_message)
+                        else:
+                            # Handle the case when the URL contains "/reference"
+                            
+                            # Scroll the page to bring the element into view
+                            watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.titlereference-watch-ribbon > .wl-ribbon')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                            
+                            # Check if watchlist_button has class .not-inWL before clicking
+                            if 'not-inWL' in watchlist_button.get_attribute('class'):
+                                driver.execute_script("arguments[0].click();", watchlist_button)
                         
                     except (NoSuchElementException, TimeoutException, PageLoadException):
                         error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
@@ -348,23 +364,44 @@ def main():
                             # Page failed to load, raise an exception
                             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                         
-                        # Wait until the rating bar has loaded
-                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__loading"]')))
+                        current_url = driver.current_url
                         
-                        # Wait until rate button is located and scroll to it
-                        button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                        driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                        # Check if the URL doesn't contain "/reference"
+                        if "/reference" not in current_url:
+                            # Wait until the rating bar has loaded
+                            wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__loading"]')))
+                            
+                            # Wait until rate button is located and scroll to it
+                            button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", button)
 
-                        # click on "Rate" button and select rating option, then submit rating
-                        button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                        element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
-                        if element_rating_bar:
+                            # click on "Rate" button and select rating option, then submit rating
+                            button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                            element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
+                            if element_rating_bar:
+                                driver.execute_script("arguments[0].click();", button)
+                                rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                                driver.execute_script("arguments[0].click();", rating_option_element)
+                                submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                                submit_element.click()
+                                time.sleep(1)
+                        else:
+                            # Handle the case when the URL contains "/reference"
+                            
+                            # Wait until rate button is located and scroll to it
+                            button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.ipl-rating-interactive__star-container')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", button)
+
+                            # click on "Rate" button and select rating option, then submit rating
+                            button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '.ipl-rating-interactive__star-container')))
                             driver.execute_script("arguments[0].click();", button)
-                            rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                            
+                            # Find the rating option element based on the data-value attribute
+                            rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'.ipl-rating-selector__star-link[data-value="{item["Rating"]}"]')))
                             driver.execute_script("arguments[0].click();", rating_option_element)
-                            submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                            submit_element.click()
+                            
                             time.sleep(1)
+                            
                     except (NoSuchElementException, TimeoutException, PageLoadException):
                         error_message = f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
                         print(f"   - {error_message}")
@@ -566,31 +603,46 @@ def main():
                             # Page failed to load, raise an exception
                             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                         
-                        # Wait until the loader has disappeared, indicating the watchlist button has loaded
-                        wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
+                        current_url = driver.current_url
                         
-                        # Scroll the page to bring the element into view
-                        watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
-                        driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
-                        
-                        # Wait for the element to be clickable
-                        watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
-                        
-                        # Check if item is not in watchlist otherwise skip it
-                        if 'ipc-icon--add' not in watchlist_button.get_attribute('innerHTML'):
-                            retry_count = 0
-                            while retry_count < 2:
-                                driver.execute_script("arguments[0].click();", watchlist_button)
-                                try:
-                                    WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--add')))
-                                    break  # Break the loop if successful
-                                except TimeoutException:
-                                    retry_count += 1
+                        # Check if the URL doesn't contain "/reference"
+                        if "/reference" not in current_url:
+                            # Wait until the loader has disappeared, indicating the watchlist button has loaded
+                            wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
+                            
+                            # Scroll the page to bring the element into view
+                            watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                            
+                            # Wait for the element to be clickable
+                            watchlist_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"]')))
+                            
+                            # Check if item is not in watchlist otherwise skip it
+                            if 'ipc-icon--add' not in watchlist_button.get_attribute('innerHTML'):
+                                retry_count = 0
+                                while retry_count < 2:
+                                    driver.execute_script("arguments[0].click();", watchlist_button)
+                                    try:
+                                        WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--add')))
+                                        break  # Break the loop if successful
+                                    except TimeoutException:
+                                        retry_count += 1
 
-                            if retry_count == 2:
-                                error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
-                                print(f"   - {error_message}")
-                                EL.logger.error(error_message)
+                                if retry_count == 2:
+                                    error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
+                                    print(f"   - {error_message}")
+                                    EL.logger.error(error_message)
+                    
+                        else:
+                            # Handle the case when the URL contains "/reference"
+                            
+                            # Scroll the page to bring the element into view
+                            watchlist_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.titlereference-watch-ribbon > .wl-ribbon')))
+                            driver.execute_script("arguments[0].scrollIntoView(true);", watchlist_button)
+                            
+                            # Check if watchlist_button doesn't have the class .not-inWL before clicking
+                            if 'not-inWL' not in watchlist_button.get_attribute('class'):
+                                driver.execute_script("arguments[0].click();", watchlist_button)
 
                     except (NoSuchElementException, TimeoutException, PageLoadException):
                         error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
@@ -612,6 +664,12 @@ def main():
         error_message = "An error occurred while running the script."
         EH.report_error(error_message)
         EL.logger.error(error_message, exc_info=True)
+        
+        # Close the driver and stop the service if they were initialized
+        if 'driver' in locals() and driver is not None:
+            driver.quit()
+        if 'service' in locals() and service is not None:
+            service.stop()
 
 if __name__ == '__main__':
     main()
