@@ -30,12 +30,12 @@ def getTraktData():
             movie = item.get('movie')
             imdb_movie_id = movie.get('ids', {}).get('imdb')
             trakt_movie_id = movie.get('ids', {}).get('trakt')
-            trakt_watchlist.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Type': 'movie'})
+            trakt_watchlist.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Date_Added': item.get('listed_at'), 'Type': 'movie'})
         elif item['type'] == 'show':
             show = item.get('show')
             imdb_show_id = show.get('ids', {}).get('imdb')
             trakt_show_id = show.get('ids', {}).get('trakt')
-            trakt_watchlist.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'Type': 'show'})
+            trakt_watchlist.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'Date_Added': item.get('listed_at'), 'Type': 'show'})
         elif item['type'] == 'episode':
             show = item.get('show')
             show_title = show.get('title')
@@ -43,7 +43,7 @@ def getTraktData():
             imdb_episode_id = episode.get('ids', {}).get('imdb')
             trakt_episode_id = episode.get('ids', {}).get('trakt')
             episode_title = f'{show_title}: {episode.get("title")}'
-            trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'Type': 'episode'})
+            trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'Date_Added': item.get('listed_at'), 'Type': 'episode'})
     
     # Get Trakt Ratings
     response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/ratings?sort=newest')
@@ -57,18 +57,18 @@ def getTraktData():
         if item['type'] == 'movie':
             movie = item.get('movie')
             movie_id = movie.get('ids', {}).get('imdb')
-            movie_ratings.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': movie_id, 'Type': 'movie'})
+            movie_ratings.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': movie_id, 'Date_Added': item.get('rated_at'), 'Type': 'movie'})
         elif item['type'] == 'show':
             show = item.get('show')
             show_id = show.get('ids', {}).get('imdb')
-            show_ratings.append({'Title': show.get('title'), 'Year': show.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': show_id, 'Type': 'show'})
+            show_ratings.append({'Title': show.get('title'), 'Year': show.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': show_id, 'Date_Added': item.get('rated_at'), 'Type': 'show'})
         elif item['type'] == 'episode':
             show = item.get('show')
             show_title = show.get('title')
             episode = item.get('episode')
             episode_id = episode.get('ids', {}).get('imdb')
             episode_title = f'{show_title}: {episode.get("title")}'
-            episode_ratings.append({'Title': episode_title, 'Year': episode.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': episode_id, 'Type': 'episode'})
+            episode_ratings.append({'Title': episode_title, 'Year': episode.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': episode_id, 'Date_Added': item.get('rated_at'), 'Type': 'episode'})
 
     trakt_ratings = movie_ratings + show_ratings + episode_ratings
 

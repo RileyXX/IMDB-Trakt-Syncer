@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -120,7 +121,7 @@ def main():
         
         trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
         imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
-
+        
         # Get trakt and imdb data and filter out items with missing imdb id
         trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
         imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
@@ -135,7 +136,34 @@ def main():
         trakt_reviews_to_set = [review for review in imdb_reviews if review['IMDB_ID'] not in [trakt_review['IMDB_ID'] for trakt_review in trakt_reviews]]
         imdb_watchlist_to_set = [item for item in trakt_watchlist if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watchlist]]
         trakt_watchlist_to_set = [item for item in imdb_watchlist if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watchlist]]
-        # Filter out items where the comment length is less than 600 characters
+        
+        # Filter ratings to update
+        imdb_ratings_to_update = []
+        trakt_ratings_to_update = []
+
+        # Dictionary to store IMDB_IDs and their corresponding ratings for IMDB and Trakt
+        imdb_ratings_dict = {rating['IMDB_ID']: rating for rating in imdb_ratings}
+        trakt_ratings_dict = {rating['IMDB_ID']: rating for rating in trakt_ratings}
+
+        # Include only items with the same IMDB_ID and different ratings and prefer the most recent rating
+        for imdb_id, imdb_rating in imdb_ratings_dict.items():
+            if imdb_id in trakt_ratings_dict:
+                trakt_rating = trakt_ratings_dict[imdb_id]
+                if imdb_rating['Rating'] != trakt_rating['Rating']:
+                    imdb_date_added = datetime.fromisoformat(imdb_rating['Date_Added'])
+                    trakt_date_added = datetime.fromisoformat(trakt_rating['Date_Added'])
+                    
+                    # If IMDB rating is more recent, add the Trakt rating to the update list, and vice versa
+                    if imdb_date_added > trakt_date_added:
+                        trakt_ratings_to_update.append(imdb_rating)
+                    else:
+                        imdb_ratings_to_update.append(trakt_rating)
+
+        # Update ratings_to_set
+        imdb_ratings_to_set.extend(imdb_ratings_to_update)
+        trakt_ratings_to_set.extend(trakt_ratings_to_update)
+        
+        # Filter out review items where the comment length is less than 600 characters
         def filter_by_comment_length(lst, min_comment_length=None):
             result = []
             for item in lst:
@@ -377,7 +405,7 @@ def main():
 
                             # click on "Rate" button and select rating option, then submit rating
                             button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                            element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__unrated"]')
+                            element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"]')
                             if element_rating_bar:
                                 driver.execute_script("arguments[0].click();", button)
                                 rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
