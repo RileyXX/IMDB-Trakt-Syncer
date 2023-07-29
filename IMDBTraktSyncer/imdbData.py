@@ -2,6 +2,7 @@ import os
 import time
 import csv
 import requests
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -53,6 +54,9 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     title = row[5]
                     year = row[10]
                     imdb_id = row[1]
+                    date_added = row[2]
+                    # Convert date format
+                    date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
                     if "tvSeries" in row[7] or "tvMiniSeries" in row[7]:
                         media_type = "show"
                     elif "tvEpisode" in row[7]:
@@ -61,7 +65,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    imdb_watchlist.append({'Title': title, 'Year': year, 'IMDB_ID': imdb_id, 'Type': media_type})
+                    imdb_watchlist.append({'Title': title, 'Year': year, 'IMDB_ID': imdb_id, 'Date_Added': date_added, 'Type': media_type})
         except FileNotFoundError:
             error_message = "Ratings file not found"
             print(f"{error_message}")
@@ -108,6 +112,9 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     year = row[8]
                     rating = row[1]
                     imdb_id = row[0]
+                    date_added = row[2]
+                    # Convert date format
+                    date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
                     if "tvSeries" in row[5] or "tvMiniSeries" in row[5]:
                         media_type = "show"
                     elif "tvEpisode" in row[5]:
@@ -116,7 +123,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': rating, 'IMDB_ID': imdb_id, 'Type': media_type})
+                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': int(rating), 'IMDB_ID': imdb_id, 'Date_Added': date_added, 'Type': media_type})
         except FileNotFoundError:
             print('Ratings file not found')
             
