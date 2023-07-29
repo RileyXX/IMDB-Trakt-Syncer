@@ -153,11 +153,13 @@ def main():
                     imdb_date_added = datetime.fromisoformat(imdb_rating['Date_Added'])
                     trakt_date_added = datetime.fromisoformat(trakt_rating['Date_Added'])
                     
-                    # If IMDB rating is more recent, add the Trakt rating to the update list, and vice versa
-                    if imdb_date_added > trakt_date_added:
-                        trakt_ratings_to_update.append(imdb_rating)
-                    else:
-                        imdb_ratings_to_update.append(trakt_rating)
+                    # Check if ratings were added on different days
+                    if (imdb_date_added.year, imdb_date_added.month, imdb_date_added.day) != (trakt_date_added.year, trakt_date_added.month, trakt_date_added.day):
+                        # If IMDB rating is more recent, add the Trakt rating to the update list, and vice versa
+                        if imdb_date_added > trakt_date_added:
+                            trakt_ratings_to_update.append(imdb_rating)
+                        else:
+                            imdb_ratings_to_update.append(trakt_rating)
 
         # Update ratings_to_set
         imdb_ratings_to_set.extend(imdb_ratings_to_update)
