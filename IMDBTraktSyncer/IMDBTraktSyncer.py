@@ -231,13 +231,16 @@ def main():
                                 "imdb": imdb_id
                             }
                         })
+                    else:
+                        data = None
 
-                    response = EH.make_trakt_request(url, payload=data)
-                    
-                    if response is None:
-                        error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist"
-                        print(f"   - {error_message}")
-                        EL.logger.error(error_message)
+                    if data:
+                        response = EH.make_trakt_request(url, payload=data)
+                        
+                        if response is None:
+                            error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist"
+                            print(f"   - {error_message}")
+                            EL.logger.error(error_message)
 
                 print('Setting Trakt Watchlist Items Complete')
             else:
@@ -364,14 +367,17 @@ def main():
                             }]
                         }
                         print(f" - Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                    else:
+                        data = None
+                    
+                    if data:
+                        # Make the API call to rate the item
+                        response = EH.make_trakt_request(rate_url, payload=data)
 
-                    # Make the API call to rate the item
-                    response = EH.make_trakt_request(rate_url, payload=data)
-
-                    if response is None:
-                        error_message = f"Failed rating {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt"
-                        print(f"   - {error_message}")
-                        EL.logger.error(error_message)
+                        if response is None:
+                            error_message = f"Failed rating {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt"
+                            print(f"   - {error_message}")
+                            EL.logger.error(error_message)
 
                 print('Setting Trakt Ratings Complete')
             else:
@@ -487,13 +493,16 @@ def main():
                                     "imdb": episode_id
                                 }
                             }
+                        else:
+                            data = None
                         
-                        response = EH.make_trakt_request(url, payload=data)
-                        
-                        if response is None:
-                            error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt"
-                            print(f"   - {error_message}")
-                            EL.logger.error(error_message)
+                        if data:
+                            response = EH.make_trakt_request(url, payload=data)
+                            
+                            if response is None:
+                                error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt"
+                                print(f"   - {error_message}")
+                                EL.logger.error(error_message)
 
                     print('Trakt Reviews Set Successfully')
                 else:
@@ -600,14 +609,17 @@ def main():
                             }]
                         }
                         print(f" - Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                    else:
+                        data = None
 
-                    # Make the API call to remove the item from the watchlist
-                    response = EH.make_trakt_request(remove_url, payload=data)
+                    if data:
+                        # Make the API call to remove the item from the watchlist
+                        response = EH.make_trakt_request(remove_url, payload=data)
 
-                    if response is None:
-                        error_message = f"Failed removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
-                        print(f"   - {error_message}")
-                        EL.logger.error(error_message)
+                        if response is None:
+                            error_message = f"Failed removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
+                            print(f"   - {error_message}")
+                            EL.logger.error(error_message)
 
                 print('Removing Watched Items From Trakt Watchlist Complete')
             else:

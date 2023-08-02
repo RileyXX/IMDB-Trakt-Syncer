@@ -61,7 +61,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "show"
                     elif "tvEpisode" in row[7]:
                         media_type = "episode"
-                    elif "movie" in row[7]:
+                    elif "movie" in row[7] or "tvSpecial" in row[7] or "tvMovie" in row[7] or "tvShort" in row[7] or "video" in row[7]:
                         media_type = "movie"
                     else:
                         media_type = "unknown"
@@ -119,7 +119,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "show"
                     elif "tvEpisode" in row[5]:
                         media_type = "episode"
-                    elif "movie" in row[5]:
+                    elif "movie" in row[5] or "tvSpecial" in row[5] or "tvMovie" in row[5] or "tvShort" in row[5] or "video" in row[5]:
                         media_type = "movie"
                     else:
                         media_type = "unknown"
