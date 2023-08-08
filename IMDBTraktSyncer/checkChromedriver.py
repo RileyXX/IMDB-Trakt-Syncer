@@ -50,8 +50,8 @@ def install_chromedriver_fallback_method():
     print("Using install chromedriver-py fallback method")
     # Install the chromedriver-py package using the Python interpreter
     feed = feedparser.parse('https://pypi.org/rss/project/chromedriver-py/releases.xml')
-    # Get the second latest release version
-    version = feed.entries[1].title.split()[-1]
+    # Get the latest release version
+    version = feed.entries[0].title.split()[-1]
     # Install the chromedriver-py package using pip
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-cache-dir', f'chromedriver-py=={version}'])
 

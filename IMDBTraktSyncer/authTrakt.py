@@ -5,8 +5,8 @@ try:
 except ImportError:
     import errorLogger as EL
 
-def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=3):
-    retry_delay = 5  # seconds between retries
+def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
+    retry_delay = 1  # seconds between retries
     retry_attempts = 0
 
     while retry_attempts < max_retries:
