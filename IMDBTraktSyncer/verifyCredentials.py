@@ -33,6 +33,7 @@ def prompt_get_credentials():
             "trakt_client_id": "empty",
             "trakt_client_secret": "empty",
             "trakt_access_token": "empty",
+            "trakt_refresh_token": "empty",
             "imdb_username": "empty",
             "imdb_password": "empty"
         }
@@ -45,30 +46,38 @@ def prompt_get_credentials():
 
     # Check if any of the values are "empty" and prompt the user to enter them
     for key in values.keys():
-        if values[key] == "empty" and key != "trakt_access_token":
+        if values[key] == "empty" and (key != "trakt_access_token" and key != "trakt_refresh_token"):
             values[key] = input(f"Please enter a value for {key}: ").strip()
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(values, f)
 
-    # Get the trakt_access_token value if it exists, or run the authTrakt.py function to get it
+    # Get the trakt_refresh_token_token value if it exists, or run the authTrakt.py function to get it
     trakt_access_token = None
-    if "trakt_access_token" in values and values["trakt_access_token"] != "empty":
-        trakt_access_token = values["trakt_access_token"]
-    else:
-        client_id = values["trakt_client_id"]
-        client_secret = values["trakt_client_secret"]
-        trakt_access_token = authTrakt.authenticate(client_id, client_secret)
+    trakt_refresh_token = None
+    client_id = values["trakt_client_id"]
+    client_secret = values["trakt_client_secret"]
+    if "trakt_refresh_token" in values and values["trakt_refresh_token"] != "empty":
+        trakt_access_token = values["trakt_refresh_token"]
+        trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret, trakt_access_token)
         values["trakt_access_token"] = trakt_access_token
+        values["trakt_refresh_token"] = trakt_refresh_token
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(values, f)
+    else:
+        trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret)
+        values["trakt_access_token"] = trakt_access_token
+        values["trakt_refresh_token"] = trakt_refresh_token
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(values, f)
 
     trakt_client_id = values["trakt_client_id"]
     trakt_client_secret = values["trakt_client_secret"]
     trakt_access_token = values["trakt_access_token"]
+    trakt_refresh_token = values["trakt_refresh_token"]
     imdb_username = values["imdb_username"]
     imdb_password = values["imdb_password"]
     
-    return trakt_client_id, trakt_client_secret, trakt_access_token, imdb_username, imdb_password
+    return trakt_client_id, trakt_client_secret, trakt_access_token, trakt_refresh_token, imdb_username, imdb_password
 
 def prompt_sync_ratings():
     # Define the file path
@@ -308,7 +317,7 @@ def prompt_remove_watched_from_watchlists():
     return remove_watched_from_watchlists_value
 
 # Save the credential values as variables
-trakt_client_id, trakt_client_secret, trakt_access_token, imdb_username, imdb_password = prompt_get_credentials()
+trakt_client_id, trakt_client_secret, trakt_access_token, trakt_refresh_token, imdb_username, imdb_password = prompt_get_credentials()
 sync_watchlist_value = prompt_sync_watchlist()
 sync_ratings_value = prompt_sync_ratings()
 remove_watched_from_watchlists_value = prompt_remove_watched_from_watchlists()
