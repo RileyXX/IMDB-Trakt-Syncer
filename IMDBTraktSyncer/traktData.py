@@ -187,10 +187,10 @@ def getTraktData():
         trakt_show_id = show['TraktID']
         show_status = show['ShowStatus']
         aired_episodes = show['AiredEpisodes']
-        episode_numbers = {episode['EpisodeNumber'] for episode in watched_episodes if episode['Type'] == 'episode' and episode['TraktShowID'] == trakt_show_id}
+        episode_numbers = [episode['EpisodeNumber'] for episode in watched_episodes if episode['Type'] == 'episode' and episode['TraktShowID'] == trakt_show_id]
         unique_watched_episode_count = len(episode_numbers)
-
-        if (show_status == 'ended' or show_status == 'cancelled') and unique_watched_episode_count >= 0.8 * int(aired_episodes):
+        
+        if (show_status.lower() in ['ended', 'cancelled', 'canceled']) and (unique_watched_episode_count >= 0.8 * int(aired_episodes)):
             filtered_watched_shows.append(show)
 
     # Update watched_shows with the filtered results
