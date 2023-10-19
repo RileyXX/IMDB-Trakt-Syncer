@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -150,8 +150,8 @@ def main():
             if imdb_id in trakt_ratings_dict:
                 trakt_rating = trakt_ratings_dict[imdb_id]
                 if imdb_rating['Rating'] != trakt_rating['Rating']:
-                    imdb_date_added = datetime.fromisoformat(imdb_rating['Date_Added'])
-                    trakt_date_added = datetime.fromisoformat(trakt_rating['Date_Added'])
+                    imdb_date_added = datetime.fromisoformat(imdb_rating['Date_Added'].replace('Z', '')).replace(tzinfo=timezone.utc)
+                    trakt_date_added = datetime.fromisoformat(trakt_rating['Date_Added'].replace('Z', '')).replace(tzinfo=timezone.utc)
                     
                     # Check if ratings were added on different days
                     if (imdb_date_added.year, imdb_date_added.month, imdb_date_added.day) != (trakt_date_added.year, trakt_date_added.month, trakt_date_added.day):
