@@ -8,11 +8,22 @@ except ImportError:
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
     retry_delay = 1  # seconds between retries
     retry_attempts = 0
+    
+    if headers is None:
+        headers = {
+            'Content-Type': 'application/json',
+        }
 
     while retry_attempts < max_retries:
         response = None
         try:
-            response = requests.post(url, headers=headers, json=payload)
+            if payload is None:
+                if params:
+                    response = requests.get(url, headers=headers, params=params)
+                else:
+                    response = requests.get(url, headers=headers)
+            else:
+                response = requests.post(url, headers=headers, json=payload)
 
             if response.status_code in [200, 201, 204]:
                 return response  # Request succeeded, return response
@@ -23,16 +34,20 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
                 retry_delay *= 2  # Exponential backoff for retries
             else:
                 # Handle other status codes as needed
-                error_message = get_trakt_message(response.status_code)
-                print(f"Request failed with status code {response.status_code}: {error_message}")
+                status_message = get_trakt_message(response.status_code)
+                error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                print(f"   - {error_message}")
+                EL.logger.error(f"{error_message}. URL: {url}")
                 return None
 
         except requests.exceptions.RequestException as e:
-            print(f"Request failed with exception: {e}")
+            error_message = f"Request failed with exception: {e}"
+            print(f"   - {error_message}")
+            EL.logger.error(error_message, exc_info=True)
             return None
 
     error_message = "Max retry attempts reached with Trakt API, request failed."
-    print(f"{error_message}")
+    print(f"   - {error_message}")
     EL.logger.error(error_message)
     return None
 
@@ -82,12 +97,14 @@ def authenticate(client_id, client_secret, refresh_token=None):
             'grant_type': 'refresh_token'
         }
 
-        response = requests.post('https://api.trakt.tv/oauth/token', json=data)
+        # Use make_trakt_request for the POST request
+        response = make_trakt_request('https://api.trakt.tv/oauth/token', payload=data)
 
-        json_data = response.json()
-        ACCESS_TOKEN = json_data['access_token']
-        REFRESH_TOKEN = json_data['refresh_token']
-        return ACCESS_TOKEN, REFRESH_TOKEN
+        if response:
+            json_data = response.json()
+            ACCESS_TOKEN = json_data['access_token']
+            REFRESH_TOKEN = json_data['refresh_token']
+            return ACCESS_TOKEN, REFRESH_TOKEN
 
     else:
         # Set up the authorization endpoint URL
@@ -109,9 +126,6 @@ def authenticate(client_id, client_secret, refresh_token=None):
         authorization_code = input('Please enter the authorization code from the URL: ')
 
         # Set up the access token request
-        headers = {
-            'Content-Type': 'application/json'
-        }
         data = {
             'code': authorization_code,
             'client_id': CLIENT_ID,
@@ -120,16 +134,19 @@ def authenticate(client_id, client_secret, refresh_token=None):
             'grant_type': 'authorization_code'
         }
 
-        # Make the request to get the access token
-        response = requests.post('https://api.trakt.tv/oauth/token', json=data)
+        # Use make_trakt_request for the POST request
+        response = make_trakt_request('https://api.trakt.tv/oauth/token', payload=data)
 
-        # Parse the JSON response from the API
-        json_data = response.json()
+        if response:
+            # Parse the JSON response from the API
+            json_data = response.json()
 
-        # Extract the access token from the response
-        ACCESS_TOKEN = json_data['access_token']
-        
-        # Extract the refresh token from the response
-        REFRESH_TOKEN = json_data['refresh_token']
+            # Extract the access token from the response
+            ACCESS_TOKEN = json_data['access_token']
 
-        return ACCESS_TOKEN, REFRESH_TOKEN
+            # Extract the refresh token from the response
+            REFRESH_TOKEN = json_data['refresh_token']
+
+            return ACCESS_TOKEN, REFRESH_TOKEN
+
+    return None

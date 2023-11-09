@@ -12,6 +12,21 @@ def prompt_get_credentials():
     # Define the file path
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
+    
+    default_values = {
+        "trakt_client_id": "empty",
+        "trakt_client_secret": "empty",
+        "trakt_access_token": "empty",
+        "trakt_refresh_token": "empty",
+        "imdb_username": "empty",
+        "imdb_password": "empty"
+    }
+    
+    # Check if the file exists
+    if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
+        # If the file does not exist or is empty, create it with default values
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(default_values, f)
 
     # Old version support (v1.0.6 and below). Convert old credentials.txt format to json
     if os.path.isfile(file_path):
@@ -26,23 +41,18 @@ def prompt_get_credentials():
                 json.dump(values, txt_file)
             print("Warning: You are using a depreciated credentials.txt file.\nConversion successful: credentials.txt file converted to the new JSON format.")
 
-    # Check if the file exists
-    if not os.path.isfile(file_path):
-        # If the file does not exist, create it with default values
-        default_values = {
-            "trakt_client_id": "empty",
-            "trakt_client_secret": "empty",
-            "trakt_access_token": "empty",
-            "trakt_refresh_token": "empty",
-            "imdb_username": "empty",
-            "imdb_password": "empty"
-        }
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(default_values, f)
-
-    # Load the values from the file
+    # Load the values from the file or initialize with default values
     with open(file_path, 'r', encoding='utf-8') as f:
-        values = json.load(f)
+        try:
+            values = json.load(f)
+        except json.decoder.JSONDecodeError:
+            # Handle the case where the file is empty or not a valid JSON
+            values = default_values
+
+    # Check if any default values are missing and add them if necessary
+    for key, default_value in default_values.items():
+        if key not in values:
+            values[key] = default_value
 
     # Check if any of the values are "empty" and prompt the user to enter them
     for key in values.keys():
@@ -230,7 +240,7 @@ def prompt_sync_reviews():
 
     while True:
         # Prompt the user for input
-        print("Ratings are synced by default. Please note: comments synced to IMDB will use \"My Review\" as the title field.")
+        print("Please note: comments synced to IMDB will use \"My Review\" as the title field.")
         print("Do you want to sync comments? (y/n)")
         user_input = input("Enter your choice: ")
 
