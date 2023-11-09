@@ -105,6 +105,9 @@ def authenticate(client_id, client_secret, refresh_token=None):
             ACCESS_TOKEN = json_data['access_token']
             REFRESH_TOKEN = json_data['refresh_token']
             return ACCESS_TOKEN, REFRESH_TOKEN
+        else:
+            # empty response, invalid refresh token, prompt user to re-authenticate
+            return authenticate(CLIENT_ID, CLIENT_SECRET)
 
     else:
         # Set up the authorization endpoint URL
