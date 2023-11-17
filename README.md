@@ -73,7 +73,7 @@ If you find my scripts helpful, you can become a [sponsor](https://github.com/sp
 
 ## Also Posted On
 - [PyPi](https://pypi.org/project/IMDBTraktSyncer/)
-- [Reddit](https://www.reddit.com/r/trakt/comments/132heo0/IMDB_trakt_rating_syncer_tool_sync_both_ways/)
+- [Reddit](https://www.reddit.com/r/trakt/comments/17xd8ic/imdb_trakt_watchlistrating_syncer_tool_sync_both/)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
