@@ -699,6 +699,7 @@ def main():
         
         #Close web driver
         print("Closing webdriver...")
+        driver.close()
         driver.quit()
         service.stop()
     
@@ -709,6 +710,7 @@ def main():
         
         # Close the driver and stop the service if they were initialized
         if 'driver' in locals() and driver is not None:
+            driver.close()
             driver.quit()
         if 'service' in locals() and service is not None:
             service.stop()
