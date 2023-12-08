@@ -115,6 +115,7 @@ def main():
             print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
             print("\nStopping script...")
             EL.logger.error("Error: Not signed in to IMDB")
+            driver.close()
             driver.quit()
             service.stop()
             raise SystemExit
