@@ -1,36 +1,40 @@
-import os
-import json
-import requests
-import time
-from datetime import datetime, timezone, timedelta
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
-try:
-    from IMDBTraktSyncer import checkChromedriver
-    from IMDBTraktSyncer import verifyCredentials as VC
-    from IMDBTraktSyncer import traktData
-    from IMDBTraktSyncer import imdbData
-    from IMDBTraktSyncer import errorHandling as EH
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import checkChromedriver
-    import verifyCredentials as VC
-    import traktData
-    import imdbData
-    import errorHandling as EH
-    import errorLogger as EL
-from chromedriver_py import binary_path
-
-class PageLoadException(Exception):
-    pass
-
 def main():
+    print("Starting IMDBTraktSyncer....")
+    import os
+    import json
+    import requests
+    import time
+    from datetime import datetime, timezone, timedelta
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import SessionNotCreatedException
+
+    try:
+        from IMDBTraktSyncer import checkVersion
+        from IMDBTraktSyncer import checkChromedriver
+        from IMDBTraktSyncer import verifyCredentials as VC
+        from IMDBTraktSyncer import traktData
+        from IMDBTraktSyncer import imdbData
+        from IMDBTraktSyncer import errorHandling as EH
+        from IMDBTraktSyncer import errorLogger as EL
+    except ImportError:
+        import checkVersion
+        import checkChromedriver
+        import verifyCredentials as VC
+        import traktData
+        import imdbData
+        import errorHandling as EH
+        import errorLogger as EL
+    from chromedriver_py import binary_path
+
+    class PageLoadException(Exception):
+        pass
+        
     try:
 
         #Get credentials
@@ -45,7 +49,7 @@ def main():
         options.add_argument("--headless=new")
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
         options.add_experimental_option("prefs", {"download.default_directory": directory, "download.directory_upgrade": True, "download.prompt_for_download": False, "credentials_enable_service": False, "profile.password_manager_enabled": False})
-        options.add_argument('--window-size=1920,1080')
+        options.add_argument('--start-maximized')
         options.add_argument("--disable-save-password-bubble")
         options.add_argument("--disable-infobars")
         options.add_argument("--disable-autofill-for-password-fields")
@@ -703,6 +707,7 @@ def main():
         driver.close()
         driver.quit()
         service.stop()
+        print("IMDBTraktSyncer Complete")
     
     except Exception as e:
         error_message = "An error occurred while running the script."
