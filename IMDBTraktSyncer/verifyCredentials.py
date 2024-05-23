@@ -12,6 +12,7 @@ def prompt_get_credentials():
     # Define the file path
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
+    print(f"Your credentials and error log files are saved at:\n{here}")
     
     default_values = {
         "trakt_client_id": "empty",
@@ -240,8 +241,8 @@ def prompt_sync_reviews():
 
     while True:
         # Prompt the user for input
-        print("Please note: comments synced to IMDB will use \"My Review\" as the title field.")
-        print("Do you want to sync comments? (y/n)")
+        print("Please note: reviews synced to IMDB will use \"My Review\" as the title field.")
+        print("Do you want to sync reviews? (y/n)")
         user_input = input("Enter your choice: ")
 
         # Validate user input
