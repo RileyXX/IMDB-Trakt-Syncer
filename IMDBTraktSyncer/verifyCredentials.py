@@ -12,7 +12,7 @@ def prompt_get_credentials():
     # Define the file path
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
-    print(f"Your credentials and error log files are saved at:\n{here}")
+    print(f"Your settings are saved at:\n{here}")
     
     default_values = {
         "trakt_client_id": "empty",

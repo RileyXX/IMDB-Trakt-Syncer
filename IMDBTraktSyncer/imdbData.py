@@ -124,23 +124,41 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
             watchlist_path = os.path.join(directory, csv_files[0])
             with open(watchlist_path, 'r', encoding='utf-8') as file:
                 reader = csv.reader(file)
-                header = next(reader)  # skip the header row
+                header = next(reader)  # Read the header row
+
+                # Create a mapping from header names to their index
+                header_index = {column_name: index for index, column_name in enumerate(header)}
+                
+                required_columns = ["Title", "Year", "Const", "Created", "Title Type"]
+                missing_columns = [col for col in required_columns if col not in header_index]
+                if missing_columns:
+                    raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
+
                 for row in reader:
-                    title = row[5]
-                    year = row[10]
-                    imdb_id = row[1]
-                    date_added = row[2]
+                    title = row[header_index['Title']]
+                    year = row[header_index['Year']]
+                    imdb_id = row[header_index['Const']]
+                    date_added = row[header_index['Created']]
+                    media_type = row[header_index['Title Type']]
                     # Convert date format
                     date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                    if "tvSeries" in row[7] or "tvMiniSeries" in row[7]:
+                    if "TV Series" in media_type or "TV Mini Series" in media_type:
                         media_type = "show"
-                    elif "tvEpisode" in row[7]:
+                    elif "TV Episode" in media_type:
                         media_type = "episode"
-                    elif "movie" in row[7] or "tvSpecial" in row[7] or "tvMovie" in row[7] or "tvShort" in row[7] or "video" in row[7]:
+                    elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    imdb_watchlist.append({'Title': title, 'Year': year, 'IMDB_ID': imdb_id, 'Date_Added': date_added, 'Type': media_type})
+                    
+                    imdb_watchlist.append({
+                        'Title': title,
+                        'Year': year,
+                        'IMDB_ID': imdb_id,
+                        'Date_Added': date_added,
+                        'Type': media_type
+                    })
+            
         except FileNotFoundError as e:
             print(f"Error: {error_message}", exc_info=True)
             EL.logger.error(error_message, exc_info=True)
@@ -201,28 +219,47 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
             ratings_path = os.path.join(directory, csv_files[0])
             with open(ratings_path, 'r', encoding='utf-8') as file:
                 reader = csv.reader(file)
-                header = next(reader)  # skip the header row
+                header = next(reader)  # Read the header row
+
+                # Create a mapping from header names to their index
+                header_index = {column: index for index, column in enumerate(header)}
+                
+                required_columns = ["Title", "Year", "Your Rating", "Const", "Date Rated", "Title Type"]
+                missing_columns = [col for col in required_columns if col not in header_index]
+                if missing_columns:
+                    raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
+
                 for row in reader:
-                    title = row[3]
-                    year = row[8]
-                    rating = row[1]
-                    imdb_id = row[0]
-                    date_added = row[2]
-                    # Convert date format
-                    date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                    if "tvSeries" in row[5] or "tvMiniSeries" in row[5]:
-                        media_type = "show"
-                    elif "tvEpisode" in row[5]:
-                        media_type = "episode"
-                    elif "movie" in row[5] or "tvSpecial" in row[5] or "tvMovie" in row[5] or "tvShort" in row[5] or "video" in row[5]:
-                        media_type = "movie"
-                    else:
-                        media_type = "unknown"
-                    imdb_ratings.append({'Title': title, 'Year': year, 'Rating': int(rating), 'IMDB_ID': imdb_id, 'Date_Added': date_added, 'Type': media_type})
+                        title = row[header_index['Title']]
+                        year = row[header_index['Year']]
+                        rating = row[header_index['Your Rating']]
+                        imdb_id = row[header_index['Const']]
+                        date_added = row[header_index['Date Rated']]
+                        media_type = row[header_index['Title Type']]
+                        # Convert date format
+                        date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                        if "TV Series" in media_type or "TV Mini Series" in media_type:
+                            media_type = "show"
+                        elif "TV Episode" in media_type:
+                            media_type = "episode"
+                        elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
+                            media_type = "movie"
+                        else:
+                            media_type = "unknown"
+                        # Append to the list
+                        imdb_ratings.append({
+                            'Title': title,
+                            'Year': year,
+                            'Rating': int(rating),
+                            'IMDB_ID': imdb_id,
+                            'Date_Added': date_added,
+                            'Type': media_type
+                        })
+                        
         except FileNotFoundError:
             print(f"Error: {error_message}", exc_info=True)
             EL.logger.error(error_message, exc_info=True)
-            
+        
         # Delete csv files
         for file in os.listdir(directory):
             if file.endswith('.csv'):
