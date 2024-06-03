@@ -31,7 +31,7 @@ def compare_versions(installed, latest):
     
     return parse_version(installed) < parse_version(latest)
 
-def main():
+def checkVersion():
     installed_version = get_installed_version()
     if not installed_version:
         print("IMDBTraktSyncer is not installed.")
@@ -49,5 +49,4 @@ def main():
     # else:
         # print(f"IMDBTraktSyncer is up to date (installed: {installed_version})")
 
-if __name__ == "__main__":
-    main()
+checkVersion()
