@@ -57,8 +57,12 @@ def prompt_get_credentials():
 
     # Check if any of the values are "empty" and prompt the user to enter them
     for key in values.keys():
-        if values[key] == "empty" and (key != "trakt_access_token" and key != "trakt_refresh_token"):
-            values[key] = input(f"Please enter a value for {key}: ").strip()
+        if values[key] == "empty" and key not in ["trakt_access_token", "trakt_refresh_token"]:
+            if key == "imdb_username":
+                prompt_message = f"Please enter a value for {key} (email or phone number): "
+            else:
+                prompt_message = f"Please enter a value for {key}: "
+            values[key] = input(prompt_message).strip()
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(values, f)
 
