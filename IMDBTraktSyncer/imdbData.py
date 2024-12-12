@@ -102,7 +102,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         # Check if the csv_link was found and then perform the actions
         if csv_link:
             driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
-            csv_link.click()
+            wait.until(EC.visibility_of(csv_link))
+            driver.execute_script("arguments[0].click();", csv_link)
         else:
             print("Unable to fetch IMDB watchlist data.")
 
@@ -146,18 +147,21 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = "show"
                     elif "TV Episode" in media_type:
                         media_type = "episode"
+                    elif "Video Game" in media_type:
+                        media_type = "unknown"
                     elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
                         media_type = "movie"
                     else:
                         media_type = "unknown"
                     
-                    imdb_watchlist.append({
-                        'Title': title,
-                        'Year': year,
-                        'IMDB_ID': imdb_id,
-                        'Date_Added': date_added,
-                        'Type': media_type
-                    })
+                    if media_type != "unknown":
+                        imdb_watchlist.append({
+                            'Title': title,
+                            'Year': year,
+                            'IMDB_ID': imdb_id,
+                            'Date_Added': date_added,
+                            'Type': media_type
+                        })
             
         except FileNotFoundError as e:
             print(f"Error: {error_message}", exc_info=True)
@@ -197,7 +201,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         # Check if the csv_link was found and then perform the actions
         if csv_link:
             driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
-            csv_link.click()
+            wait.until(EC.visibility_of(csv_link))
+            driver.execute_script("arguments[0].click();", csv_link)
         else:
             print("Unable to fetch IMDB ratings data.")
 
@@ -242,19 +247,23 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                             media_type = "show"
                         elif "TV Episode" in media_type:
                             media_type = "episode"
+                        elif "Video Game" in media_type:
+                            media_type = "unknown"
                         elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
                             media_type = "movie"
                         else:
                             media_type = "unknown"
+                        
                         # Append to the list
-                        imdb_ratings.append({
-                            'Title': title,
-                            'Year': year,
-                            'Rating': int(rating),
-                            'IMDB_ID': imdb_id,
-                            'Date_Added': date_added,
-                            'Type': media_type
-                        })
+                        if media_type != "unknown":
+                            imdb_ratings.append({
+                                'Title': title,
+                                'Year': year,
+                                'Rating': int(rating),
+                                'IMDB_ID': imdb_id,
+                                'Date_Added': date_added,
+                                'Type': media_type
+                            })
                         
         except FileNotFoundError:
             print(f"Error: {error_message}", exc_info=True)
@@ -293,9 +302,18 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     reviews = []
     errors_found_getting_imdb_reviews = False
     try:
-        reviews_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.aux-content-widget-2 div.subNavItem a[href*='comments-index']")))
-        reviews_link.click()
-
+        # Wait until the current page URL contains the string "user/"
+        wait.until(lambda driver: "user/" in driver.current_url)
+        
+        # Copy the full URL to a variable and append reviews to it
+        reviews_url = driver.current_url + "reviews/"
+        
+        # Load page
+        success, status_code, url = EH.get_page_with_retries(reviews_url, driver, wait)
+        if not success:
+            # Page failed to load, raise an exception
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+            
         while True:
             try:
                 try:
@@ -323,7 +341,8 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     else:
                         review['Type'] = 'unknown'
 
-                    reviews.append(review)
+                    if review['Type'] != 'unknown':
+                        reviews.append(review)
 
                 try:
                     # Check if "Next" link exists
