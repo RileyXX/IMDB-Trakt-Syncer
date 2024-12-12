@@ -124,6 +124,19 @@ def main():
             service.stop()
             raise SystemExit
         
+        # Check IMDB Language for compatability
+        # Get Current Language
+        language_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "span[id*='nav-language-selector-contents'] .selected"))).get_attribute("aria-label")
+        original_language = language_element
+        if (original_language != "English (United States)"):
+            print("Temporarily changing IMDB Language to English for compatability")
+            # Open Language Dropdown
+            language_dropdown = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "label[for*='nav-language-selector']")))
+            driver.execute_script("arguments[0].click();", language_dropdown)
+            # Change Language to English
+            english_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "span[id*='nav-language-selector-contents'] li[aria-label*='English (United States)']")))
+            driver.execute_script("arguments[0].click();", english_element)        
+        
         trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
         imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
         
@@ -206,7 +219,7 @@ def main():
 
                 for item in trakt_watchlist_to_set:
                     item_count += 1
-                    print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist")
+                    print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist ({item['IMDB_ID']})")
                     imdb_id = item['IMDB_ID']
                     media_type = item['Type']  # 'movie', 'show', or 'episode'
 
@@ -243,7 +256,7 @@ def main():
                         response = EH.make_trakt_request(url, payload=data)
                         
                         if response is None:
-                            error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist"
+                            error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist ({item['IMDB_ID']})"
                             print(f"   - {error_message}")
                             EL.logger.error(error_message)
 
@@ -263,7 +276,7 @@ def main():
                     try:
                         item_count += 1
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist")
+                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                         
                         # Load page
                         success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -349,7 +362,7 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f" - Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
                     elif item["Type"] == "movie":
                         # This is a movie
                         data = {
@@ -360,7 +373,7 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f" - Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
                     elif item["Type"] == "episode":
                         # This is an episode
                         data = {
@@ -371,7 +384,7 @@ def main():
                                 "rating": item["Rating"]
                             }]
                         }
-                        print(f" - Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt")
+                        print(f" - Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
                     else:
                         data = None
                     
@@ -380,7 +393,7 @@ def main():
                         response = EH.make_trakt_request(rate_url, payload=data)
 
                         if response is None:
-                            error_message = f"Failed rating {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt"
+                            error_message = f"Failed rating {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})"
                             print(f"   - {error_message}")
                             EL.logger.error(error_message)
 
@@ -396,7 +409,7 @@ def main():
                 for i, item in enumerate(imdb_ratings_to_set, 1):
 
                     year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                    print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB')
+                    print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item['IMDB_ID']})')
                     
                     try:
                         # Load page
@@ -469,7 +482,7 @@ def main():
 
                     for review in trakt_reviews_to_set:
                         item_count += 1
-                        print(f" - Submitting comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt")
+                        print(f" - Submitting comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt ({item['IMDB_ID']})")
                         imdb_id = review['IMDB_ID']
                         comment = review['Comment']
                         media_type = review['Type']  # 'movie', 'show', or 'episode'
@@ -505,7 +518,7 @@ def main():
                             response = EH.make_trakt_request(url, payload=data)
                             
                             if response is None:
-                                error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt"
+                                error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt ({item['IMDB_ID']})"
                                 print(f"   - {error_message}")
                                 EL.logger.error(error_message)
 
@@ -526,7 +539,7 @@ def main():
                         for review in imdb_reviews_to_set:
                             item_count += 1
                             try:
-                                print(f" - Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB")
+                                print(f" - Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})")
                                 
                                 # Load page
                                 success, status_code, url = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{review["IMDB_ID"]}/add?bus=imdb', driver, wait)
@@ -593,7 +606,7 @@ def main():
                                 }
                             }]
                         }
-                        print(f" - Removing TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing TV show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
                     elif item["Type"] == "movie":
                         # This is a movie
                         data = {
@@ -603,7 +616,7 @@ def main():
                                 }
                             }]
                         }
-                        print(f" - Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
                     elif item["Type"] == "episode":
                         # This is an episode
                         data = {
@@ -613,7 +626,7 @@ def main():
                                 }
                             }]
                         }
-                        print(f" - Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist")
+                        print(f" - Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
                     else:
                         data = None
 
@@ -622,7 +635,7 @@ def main():
                         response = EH.make_trakt_request(remove_url, payload=data)
 
                         if response is None:
-                            error_message = f"Failed removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist"
+                            error_message = f"Failed removing {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})"
                             print(f"   - {error_message}")
                             EL.logger.error(error_message)
 
@@ -642,7 +655,7 @@ def main():
                     try:
                         item_count += 1
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                        print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist")
+                        print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
                         
                         # Load page
                         success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -701,6 +714,22 @@ def main():
                 print('Removing Watched Items From IMDB Watchlist Complete')
             else:
                 print('No Watched Items To Remove From IMDB Watchlist')
+        
+        if (original_language != "English (United States)"):
+            print("Changing IMDB Language Back to Original")
+            # go to IMDB homepage
+            success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+            if not success:
+                # Page failed to load, raise an exception
+                raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+            
+            # Change Language Back to Original
+            # Open Language Dropdown
+            language_dropdown = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "label[for*='nav-language-selector']")))
+            driver.execute_script("arguments[0].click();", language_dropdown)
+            # Change Language to Original
+            original_language_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"span[id*='nav-language-selector-contents'] li[aria-label*='{original_language}']")))
+            driver.execute_script("arguments[0].click();", original_language_element)
         
         #Close web driver
         print("Closing webdriver...")

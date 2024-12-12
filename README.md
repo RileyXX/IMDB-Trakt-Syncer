@@ -69,7 +69,6 @@ If you find my scripts helpful, you can become a [sponsor](https://github.com/sp
 - Cashapp: `$rileyxx`
 - Venmo: `@rileyxx`
 - Bitcoin: `bc1qrjevwqv49z8y77len3azqfghxrjmrjvhy5zqau`
-- Amazon Wishlist: [Link ↗](https://www.amazon.com/hz/wishlist/ls/WURF5NWZ843U)
 
 ## Also Posted On
 - [PyPi](https://pypi.org/project/IMDBTraktSyncer/)
