@@ -65,6 +65,7 @@ def main():
         service = Service(executable_path=binary_path)
         try:
             driver = webdriver.Chrome(service=service, options=options)
+            driver.set_page_load_timeout(60)
         except SessionNotCreatedException as e:
             error_message = str(e)
             if "This version of ChromeDriver only supports Chrome version" in error_message:
@@ -409,7 +410,7 @@ def main():
                 for i, item in enumerate(imdb_ratings_to_set, 1):
 
                     year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                    print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item['IMDB_ID']})')
+                    print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
                     
                     try:
                         # Load page

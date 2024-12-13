@@ -98,6 +98,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 if button:
                     csv_link = button
                     break
+        
+        # Clear any previous csv files
+        for file in os.listdir(directory):
+            if file.endswith('.csv'):
+                os.remove(os.path.join(directory, file))
 
         # Check if the csv_link was found and then perform the actions
         if csv_link:
@@ -115,7 +120,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         here = os.path.abspath(os.path.dirname(__file__))
         here = directory
         
-        try:
+        try:          
             # Find any CSV file in the directory
             csv_files = [f for f in os.listdir(directory) if f.endswith('.csv')]
             if not csv_files:
@@ -197,6 +202,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 if button:
                     csv_link = button
                     break
+        
+        # Clear any previous csv files
+        for file in os.listdir(directory):
+            if file.endswith('.csv'):
+                os.remove(os.path.join(directory, file))
 
         # Check if the csv_link was found and then perform the actions
         if csv_link:
@@ -214,7 +224,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         here = os.path.abspath(os.path.dirname(__file__))
         directory = here
 
-        try:
+        try:          
             # Find any CSV file in the directory
             csv_files = [f for f in os.listdir(directory) if f.endswith('.csv')]
             if not csv_files:
