@@ -4,7 +4,7 @@ import subprocess
 
 def get_installed_version():
     try:
-        result = subprocess.run(['pip', 'show', 'imdbtraktsyncer'], capture_output=True, text=True, check=True)
+        result = subprocess.run(['python', '-m', 'pip', 'show', 'imdbtraktsyncer'], capture_output=True, text=True, check=True)
         for line in result.stdout.splitlines():
             if line.startswith("Version:"):
                 return line.split()[1]
@@ -45,7 +45,7 @@ def checkVersion():
     if compare_versions(installed_version, latest_version):
         print(f"A new version of IMDBTraktSyncer is available: {latest_version} (installed: {installed_version}).")
         print("To update use: python -m pip install IMDBTraktSyncer --upgrade")
-        print("Documentation: https://github.com/RileyXX/IMDB-Trakt-Syncer")
+        print("Documentation: https://github.com/RileyXX/IMDB-Trakt-Syncer/releases")
     # else:
         # print(f"IMDBTraktSyncer is up to date (installed: {installed_version})")
 

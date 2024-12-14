@@ -4,19 +4,21 @@ def main():
     import json
     import requests
     import time
+    import sys
     from datetime import datetime, timezone, timedelta
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
     from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import SessionNotCreatedException
+    from webdriver_manager.chrome import ChromeDriverManager
 
     try:
         from IMDBTraktSyncer import checkVersion
-        from IMDBTraktSyncer import checkChromedriver
         from IMDBTraktSyncer import verifyCredentials as VC
         from IMDBTraktSyncer import traktData
         from IMDBTraktSyncer import imdbData
@@ -24,34 +26,38 @@ def main():
         from IMDBTraktSyncer import errorLogger as EL
     except ImportError:
         import checkVersion
-        import checkChromedriver
         import verifyCredentials as VC
         import traktData
         import imdbData
         import errorHandling as EH
         import errorLogger as EL
-    from chromedriver_py import binary_path
 
     class PageLoadException(Exception):
         pass
         
     try:
-
-        #Get credentials
+        # Get credentials (if needed)
         imdb_username = VC.imdb_username
         imdb_password = VC.imdb_password
-        
+
+        # Set up directory for downloads
         directory = os.path.dirname(os.path.realpath(__file__))
-                
-        #Start web driver
-        print('Starting webdriver...')
+
+        # Start WebDriver
+        print('Starting WebDriver...')
+        
+        # Initialize Chrome options
         options = Options()
         options.add_argument("--headless=new")
-        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3')
-        options.add_experimental_option("prefs", {"download.default_directory": directory, "download.directory_upgrade": True, "download.prompt_for_download": False, "credentials_enable_service": False, "profile.password_manager_enabled": False})
+        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+        options.add_experimental_option("prefs", {
+            "download.default_directory": directory,
+            "download.directory_upgrade": True,
+            "download.prompt_for_download": False,
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False
+        })
         options.add_argument('--start-maximized')
-        options.add_argument("--disable-save-password-bubble")
-        options.add_argument("--disable-infobars")
         options.add_argument("--disable-autofill-for-password-fields")
         options.add_argument('--disable-notifications')
         options.add_argument("--disable-third-party-cookies")
@@ -61,22 +67,29 @@ def main():
         options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument('--log-level=3')
+        
+        # Temporary solution for removing "DevTools listening on ws:" line on Windows for better readability
+        # Only use CREATE_NO_WINDOW on Windows systems (32-bit or 64-bit)
+        if sys.platform == "win32":
+                popen_kw = {"creation_flags": 134217728}
+        else:
+            popen_kw = {}
 
-        service = Service(executable_path=binary_path)
+        # Create the Chrome service, adding popen_kw to avoid console window on Windows
+        service = webdriver.chrome.service.Service(ChromeDriverManager().install(), popen_kw=popen_kw) # Automatic download of the latest ChromeDriver
+
         try:
+            # Initialize WebDriver with the given options and service
             driver = webdriver.Chrome(service=service, options=options)
             driver.set_page_load_timeout(60)
-        except SessionNotCreatedException as e:
-            error_message = str(e)
-            if "This version of ChromeDriver only supports Chrome version" in error_message:
-                extract_message = error_message.split("Stacktrace:")[0].replace("Message: session not created:", "").strip()
-                print(f"Error: {extract_message}")
-                print("See this link for details on how to fix: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/16")
-                EL.logger.error(extract_message, exc_info=True)
-                raise SystemExit
-            else:
-                raise
 
+        except Exception as e:
+            error_message = (f"Error initializing WebDriver: {str(e)}")
+            print(f"{error_message}")
+            EL.logger.error(error_message)
+            raise SystemExit
+
+        # Example: Wait for an element and interact with it
         wait = WebDriverWait(driver, 10)
         
         # Load sign in page
@@ -113,12 +126,30 @@ def main():
         if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
             print("Successfully signed in to IMDB")
         else:
-            print("Error: Not signed in to IMDB")
-            print("\nPossible IMDB captcha check or IMDB login incorrect.")
-            print("\nIf your login is correct then an IMDB captcha check likely the cause of this error. To fix this, simply login to the IMDB website in your browser, preferably Chrome, and from the same computer. If logged in, log out and log back in. It may ask you to fill in a captcha; complete it and finish logging in. After logging in successfully on your browser, run the script again and it should work. You may need to repeat this step once or twice if it still gives you issues.")
-            print("\nIf your IMDB login is incorrect, simply edit the credentials.txt file with the correct login or delete the credentials file and run the script again.")
-            print("\nSee this GitHub link for more details: https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
+            print("\nError: Not signed in to IMDB")
+            print("\nPossible Causes and Solutions:")
+            print("- IMDB captcha check triggered or incorrect IMDB login.")
+            
+            print("\n1. IMDB Captcha Check:")
+            print("   If your login is correct, the issue is likely due to an IMDB captcha check.")
+            print("   To resolve this, follow these steps:")
+            print("   - Log in to IMDB on your browser (preferably Chrome) and on the same computer.")
+            print("   - If already logged in, log out and log back in.")
+            print("   - Repeat this process until a captcha check is triggered.")
+            print("   - Complete the captcha and finish logging in.")
+            print("   - After successfully logging in, run the script again.")
+            print("   - You may need to repeat these steps until the captcha check is no longer triggered.")
+            
+            print("\n2. Incorrect IMDB Login:")
+            print("   If your IMDB login is incorrect, update your login credentials:")
+            print("   - Edit the 'credentials.txt' file in your settings directory with the correct login information.")
+            print("   - Alternatively, delete the 'credentials.txt' file and run the script again.")
+            
+            print("\nFor more details, see the following GitHub link:")
+            print("https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
+            
             print("\nStopping script...")
+            
             EL.logger.error("Error: Not signed in to IMDB")
             driver.close()
             driver.quit()
