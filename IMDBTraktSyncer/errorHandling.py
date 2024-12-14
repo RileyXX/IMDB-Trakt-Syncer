@@ -1,7 +1,8 @@
 import traceback
 import requests
-from requests.exceptions import RequestException, ConnectionError, Timeout
+from requests.exceptions import ConnectionError, RequestException, Timeout, TooManyRedirects, SSLError, ProxyError
 import time
+import os
 import inspect
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -35,6 +36,7 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
+    # Set default headers if none are provided
     if headers is None:
         headers = {
             'Content-Type': 'application/json',
@@ -43,50 +45,74 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             'Authorization': f'Bearer {VC.trakt_access_token}'
         }
     
-    retry_delay = 1  # Initial seconds between retries
-    retry_attempts = 0
-    connection_timeout = 20
+    retry_delay = 1  # Initial delay between retries (in seconds)
+    retry_attempts = 0  # Count of retry attempts made
+    connection_timeout = 20  # Timeout for requests (in seconds)
+    total_wait_time = sum(retry_delay * (2 ** i) for i in range(max_retries))  # Total possible wait time
 
+    # Retry loop to handle network errors or server overload scenarios
     while retry_attempts < max_retries:
         response = None
         try:
+            # Send GET or POST request depending on whether a payload is provided
             if payload is None:
                 if params:
+                    # GET request with query parameters
                     response = requests.get(url, headers=headers, params=params, timeout=connection_timeout)
                 else:
+                    # GET request without query parameters
                     response = requests.get(url, headers=headers, timeout=connection_timeout)
             else:
+                # POST request with JSON payload
                 response = requests.post(url, headers=headers, json=payload, timeout=connection_timeout)
-            
+
+            # If request is successful, return the response
             if response.status_code in [200, 201, 204]:
-                return response  # Request succeeded, return response
+                return response
+            
+            # Handle retryable server errors and rate limit exceeded
             elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
-                # Server overloaded or rate limit exceeded, retry after delay
-                retry_attempts += 1
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff for retries
+                retry_attempts += 1  # Increment retry counter
+
+                # Respect the 'Retry-After' header if provided, otherwise use default delay
+                retry_after = int(response.headers.get('Retry-After', retry_delay))
+                remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+                print(f"   - Server returned {response.status_code}. Retrying after {retry_after}s... "
+                      f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
+                                  f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+
+                time.sleep(retry_after)  # Wait before retrying
+                retry_delay *= 2  # Apply exponential backoff for retries
+            
             else:
-                # Handle other status codes as needed
+                # Handle non-retryable HTTP status codes
                 status_message = get_trakt_message(response.status_code)
                 error_message = f"Request failed with status code {response.status_code}: {status_message}"
                 print(f"   - {error_message}")
                 EL.logger.error(f"{error_message}. URL: {url}")
-                return None
-        except (ConnectionError, Timeout) as conn_err:
-            # Handle connection reset and timeout
-            retry_attempts += 1
-            print(f"   - Connection error: {conn_err}. Retrying ({retry_attempts}/{max_retries})...")
-            EL.logger.warning(f"Connection error: {conn_err}. Retrying ({retry_attempts}/{max_retries})...")
-            time.sleep(retry_delay)
-            retry_delay *= 2  # Exponential backoff
-        except RequestException as req_err:
-            # Handle other request-related exceptions
+                return None  # Exit with failure for non-retryable errors
+
+        # Handle Network errors (connection issues, timeouts, SSL, etc.)
+        except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
+            retry_attempts += 1  # Increment retry counter
+            remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+            print(f"   - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
+                  f"Time remaining: {remaining_time}s")
+            EL.logger.warning(f"Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
+                              f"Time remaining: {remaining_time}s")
+            
+            time.sleep(retry_delay)  # Wait before retrying
+            retry_delay *= 2  # Apply exponential backoff for retries
+
+        # Handle general request-related exceptions (non-retryable)
+        except requests.exceptions.RequestException as req_err:
             error_message = f"Request failed with exception: {req_err}"
             print(f"   - {error_message}")
             EL.logger.error(error_message, exc_info=True)
-            return None
+            return None  # Exit on non-retryable exceptions
 
-    # If all retries fail
+    # If all retries are exhausted, log and return failure
     error_message = "Max retry attempts reached with Trakt API, request failed."
     print(f"   - {error_message}")
     EL.logger.error(error_message)
@@ -118,21 +144,19 @@ def get_trakt_message(status_code):
         522: "Service Unavailable - Cloudflare error"
     }
     return error_messages.get(status_code, "Unknown error")
-    
-# Custom exception for page load errors
-class PageLoadException(Exception):
-    pass
 
-# Function to get page with retries and adjusted wait time
 def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_time=5):
     num_retries = total_wait_time // initial_wait_time
     wait_time = total_wait_time / num_retries
     max_retries = num_retries
     status_code = None
     was_retry = False  # Flag to track if a retry occurred
+    total_time_spent = 0  # Track total time spent across retries
 
     for retry in range(max_retries):
         try:
+            start_time = time.time()  # Track time taken for each retry attempt
+
             # Attempt to load the page using Selenium driver
             driver.get(url)
             
@@ -146,17 +170,23 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 "return window.performance.getEntries()[0].responseStatus;"
             )
             
-            # Check for any error codes
-            if status_code is None:
-                if was_retry:
-                    print("Retry successful! Continuing...")
-                    was_retry = False  # Reset flag
-                return True, status_code, url  # Unable to determine page loaded status
+            # Check for any error codes or if status_code is None
+            if status_code is None or status_code == 0:
+                print(f"   - Unable to determine page load status. Status code returned 0 or None. Possible network or server error. URL: {url} Retrying...")
+                elapsed_time = time.time() - start_time  # Time taken for this attempt
+                total_time_spent += elapsed_time  # Update total time spent
+                
+                # Calculate the remaining time before the next retry
+                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
+                print(f"   - Remaining time for retries: {seconds_left} seconds.")
+                
+                was_retry = True  # Set flag to indicate a retry occurred
+                continue  # Retry immediately if status_code is None or 0
             elif status_code >= 400:
                 raise PageLoadException(f'Failed to load page. Status code: {status_code}. URL: {url}')
             else:
                 if was_retry:
-                    print("Retry successful! Continuing...")
+                    print("   - Retry successful! Continuing...")
                     was_retry = False  # Reset flag
                 return True, status_code, url  # Page loaded successfully
 
@@ -164,11 +194,16 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             # Handle page load timeout explicitly
             frame = inspect.currentframe()  # Get the current frame
             lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = inspect.getfile(frame)  # Get the file name where the exception occurred
+            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
             print(f"   - TimeoutException: Page load timed out. Retrying... {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
+            elapsed_time = time.time() - start_time  # Time taken for this attempt
+            
+            # Update total time spent
+            total_time_spent += elapsed_time
+            
             if retry + 1 < max_retries:
-                seconds_left = int((max_retries - retry) * wait_time)
-                print(f"   - Retrying ({retry + 1}/{max_retries}) {seconds_left} seconds remaining...")
+                seconds_left = int((total_wait_time - total_time_spent))
+                print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {seconds_left}s")
                 time.sleep(wait_time)
                 was_retry = True  # Set flag to indicate a retry occurred
                 continue
@@ -180,13 +215,30 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             # Handle Selenium-related network errors
             frame = inspect.currentframe()  # Get the current frame
             lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = inspect.getfile(frame)  # Get the file name where the exception occurred
+            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
             print(f"   - Selenium WebDriver Error: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
-            if "Connection reset by peer" in str(e):
-                print("   - Connection was reset by the server. Retrying...")
+
+            # Check for retryable errors
+            retryable_errors = [
+                "net::ERR_NAME_NOT_RESOLVED",
+                "net::ERR_DNS_TIMED_OUT",
+                "net::ERR_DNS_PROBE_FINISHED_NXDOMAIN",
+                "net::ERR_CONNECTION_RESET",
+                "net::ERR_CONNECTION_CLOSED",
+                "net::ERR_CONNECTION_REFUSED",
+                "net::ERR_CONNECTION_TIMED_OUT",
+                "net::ERR_SSL_PROTOCOL_ERROR",
+                "net::ERR_CERT_COMMON_NAME_INVALID",
+                "net::ERR_CERT_DATE_INVALID",
+                "net::ERR_NETWORK_CHANGED"
+            ]
+            if any(error in str(e) for error in retryable_errors):
+                # Calculate the time remaining before the next retry
+                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
+                print(f"   - Retryable network error detected: {str(e).splitlines()[0]} Retrying... Time Remaining: {seconds_left}s")
             elif retry + 1 < max_retries:
                 seconds_left = int((max_retries - retry) * wait_time)
-                print(f"   - Retrying ({retry + 1}/{max_retries}) {seconds_left} seconds remaining...")
+                print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {seconds_left}s")
                 time.sleep(wait_time)
                 was_retry = True  # Set flag to indicate a retry occurred
                 continue
@@ -197,12 +249,13 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
         except PageLoadException as e:
             frame = inspect.currentframe()  # Get the current frame
             lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = inspect.getfile(frame)  # Get the file name where the exception occurred
+            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
             print(f"   - Error: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
             retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
             if retry + 1 < max_retries and status_code in retryable_error_codes:
-                seconds_left = int((max_retries - retry) * wait_time)
-                print(f"   - Retrying ({retry + 1}/{max_retries}) {seconds_left} seconds remaining...")
+                # Calculate the time remaining before the next retry
+                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
+                print(f"   - Retryable PageLoadException error detected: {str(e).splitlines()[0]} Retrying... Time Remaining: {seconds_left}s")
                 time.sleep(wait_time)
                 was_retry = True  # Set flag to indicate a retry occurred
                 continue

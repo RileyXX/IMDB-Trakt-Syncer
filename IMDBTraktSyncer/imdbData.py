@@ -5,13 +5,14 @@ import requests
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
-from chromedriver_py import binary_path
+from webdriver_manager.chrome import ChromeDriverManager
 try:
     from IMDBTraktSyncer import errorHandling as EH
     from IMDBTraktSyncer import errorLogger as EL
@@ -148,17 +149,15 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     media_type = row[header_index['Title Type']]
                     # Convert date format
                     date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                    if "TV Series" in media_type or "TV Mini Series" in media_type:
+                    if media_type in ["TV Series", "TV Mini Series"]:
                         media_type = "show"
-                    elif "TV Episode" in media_type:
+                    elif media_type == "TV Episode":
                         media_type = "episode"
-                    elif "Video Game" in media_type:
-                        media_type = "unknown"
-                    elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
+                    elif media_type in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]:
                         media_type = "movie"
                     else:
                         media_type = "unknown"
-                    
+
                     if media_type != "unknown":
                         imdb_watchlist.append({
                             'Title': title,
@@ -253,13 +252,11 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                         media_type = row[header_index['Title Type']]
                         # Convert date format
                         date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
-                        if "TV Series" in media_type or "TV Mini Series" in media_type:
+                        if media_type == "TV Series" or media_type == "TV Mini Series":
                             media_type = "show"
-                        elif "TV Episode" in media_type:
+                        elif media_type == "TV Episode":
                             media_type = "episode"
-                        elif "Video Game" in media_type:
-                            media_type = "unknown"
-                        elif any(media in media_type for media in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]):
+                        elif media_type in ["Movie", "TV Special", "TV Movie", "TV Short", "Video"]:
                             media_type = "movie"
                         else:
                             media_type = "unknown"
