@@ -102,5 +102,9 @@ If you find my scripts helpful, you can become a [sponsor](https://github.com/sp
 | [AirVPN](https://airvpn.org/) | A VPN client with port forwarding support. Great VPN for torrents. |
 | [Overseerr](https://github.com/sct/overseerr) | A request management and media discovery tool for your home media server. |
 | [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) | A reverse proxy solution to bypass Cloudflare protection and access websites commonly used with Jackett. |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | A command-line program to download videos from YouTube and other sites. |
-
+| [th-ch/youtube-music](https://github.com/th-ch/youtube-music) | A lightweight and feature-rich desktop client for YouTube Music, offering additional features like ad-blocking, sponsorblock and customizable themes. |
+| [ReVanced](https://github.com/revanced) | A community-driven project to modify and enhance YouTube, offering features such as ad-blocking, background playback, and customization. |
+| uBlock Origin [Chrome](https://chromewebstore.google.com/detail/ublock-origin-lite/ddkjiahejlhfcafbddmgiahcphecmpfh) / [FireFox](https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/) | A powerful, open-source browser extension for blocking ads, trackers, and other unwanted content. |
+| SponsorBlock [Chrome](https://chromewebstore.google.com/detail/sponsorblock-for-youtube/mnjggcdmjocbbbhaepdhchncahnbgone) / [FireFox](https://addons.mozilla.org/en-US/firefox/addon/sponsorblock/) | A browser extension that automatically skips sponsored segments in YouTube videos. |
+| Enhancer for YouTube [Chrome](https://chromewebstore.google.com/detail/enhancer-for-youtube/ponfpcnoihfmfllpaingbgckeeldkhle) / [FireFox](https://addons.mozilla.org/en-US/firefox/addon/enhancer-for-youtube/) | A browser extension that adds a wide range of customization options and playback enhancements for YouTube, including the ability to force playback resolution. |
+| Return YouTube Dislike [Chrome](https://chromewebstore.google.com/detail/return-youtube-dislike/gebbhagfogifgggkldgodflihgfeippi) / [FireFox](https://addons.mozilla.org/en-US/firefox/addon/return-youtube-dislikes/) | A browser extension that restores the dislike count on YouTube videos. |
