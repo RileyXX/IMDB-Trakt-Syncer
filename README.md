@@ -35,7 +35,7 @@ _Clears cached browsers, drivers and error logs before uninstalling. Run in your
 ```
 python -m pip install IMDBTraktSyncer==VERSION_NUMBER
 ```
-_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and run in your operating system's native command line._
+_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 3.1.0) and run in your operating system's native command line._
 ## Performing a Clean Uninstall:
 ```
 IMDBTraktSyncer --clean-uninstall
