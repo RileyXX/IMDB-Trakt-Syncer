@@ -54,12 +54,12 @@ Below is a list of available commands for this package, along with a brief descr
 ## Available Commands
 
 | **Command**               | **Description**                                                                                       |
-|---------------------------|---------------------------------------------------------------------------------------------------|
-| `--clear-user-data`       | Clears user-entered credentials.                                                                  |
-| `--clear-cache`           | Clears cached browsers, drivers, and error logs.                                                 |
-| `--uninstall`             | Clears cached browsers, drivers, and error logs before uninstalling.                             |
+|---------------------------|-------------------------------------------------------------------------------------------------------|
+| `--clear-user-data`       | Clears user-entered credentials.                                                                      |
+| `--clear-cache`           | Clears cached browsers, drivers, and error logs.                                                      |
+| `--uninstall`             | Clears cached browsers, drivers, and error logs before uninstalling.                                  |
 | `--clean-uninstall`       | Clears all cached data, including user credentials, cached browsers, and drivers before uninstalling. |
-| `--directory`             | Prints the package install directory.                                                            |
+| `--directory`             | Prints the package install directory.                                                                 |
 
 ## Usage Example
 
