@@ -40,7 +40,7 @@ _Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX
 ```
 IMDBTraktSyncer --clean-uninstall
 ```
-_Clears all cached data, inluding user credentials, cached browsers and drivers before uninstalling. Run in your operating system's native command line interface._
+_Clears all cached data, inluding user credentials, cached browsers and drivers before uninstalling. Run in your operating system's native command line._
 ## Uninstall With Native Python Method:
 ```
 python -m pip uninstall IMDBTraktSyncer
