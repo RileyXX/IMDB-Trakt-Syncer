@@ -15,27 +15,27 @@ The script is compatible with operating systems that support Python (v3.6 or lat
 ```
 python -m pip install IMDBTraktSyncer
 ```
-_Run in your operating system's native command line interface._
+_Run in your operating system's native command line._
 ## Running the Script:
 ```
 IMDBTraktSyncer
 ```
-_Run in your operating system's native command line interface._
+_Run in your operating system's native command line._
 ## Updating the Script:
 ```
 python -m pip install IMDBTraktSyncer --upgrade
 ```
-_Run in your operating system's native command line interface._
+_Run in your operating system's native command line._
 ## Uninstalling the Script:
 ```
 IMDBTraktSyncer --uninstall
 ```
-_Clears cached browsers, drivers and error logs before uninstalling. Run in your operating system's native command line interface._
+_Clears cached browsers, drivers and error logs before uninstalling. Run in your operating system's native command line._
 ## Installing a Specific Version:
 ```
 python -m pip install IMDBTraktSyncer==VERSION_NUMBER
 ```
-_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and run in your operating system's native command line interface._
+_Replace `VERSION_NUMBER` with your [desired version](https://github.com/RileyXX/IMDB-Trakt-Syncer/releases) (e.g. 1.1.6) and run in your operating system's native command line._
 ## Performing a Clean Uninstall:
 ```
 IMDBTraktSyncer --clean-uninstall
@@ -45,7 +45,7 @@ _Clears all cached data, inluding user credentials, cached browsers and drivers 
 ```
 python -m pip uninstall IMDBTraktSyncer
 ```
-_Not recommended unless other uninstall methods failed. This method leaves behind any cached data such as user entered credentials, cached browsers, and drivers which can be deleted manually from your install directory. Run in your operating system's native command line interface._
+_Not recommended unless other uninstall methods failed. This method leaves behind any cached data such as user entered credentials, cached browsers, and drivers which can be deleted manually from your install directory. Run in your operating system's native command line._
 
 # Commands for IMDBTraktSyncer
 
