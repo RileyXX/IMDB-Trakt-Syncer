@@ -6,8 +6,8 @@ import sys
 def get_installed_version():
     """
     Retrieve the installed version of the 'imdbtraktsyncer' package.
-    First, attempts to use 'sys.executable -m pip'.
-    If that fails, it falls back to calling 'pip' directly.
+    First, attempts to use 'pip' directly.
+    If that fails, it falls back to calling 'sys.executable -m pip'.
     """
     # Try calling 'pip' directly
     try:
@@ -85,5 +85,3 @@ def checkVersion():
         print("Documentation: https://github.com/RileyXX/IMDB-Trakt-Syncer/releases")
     # else:
         # print(f"IMDBTraktSyncer is up to date (installed: {installed_version})")
-
-checkVersion()

@@ -3,12 +3,11 @@ import requests
 import time
 import urllib.parse
 import datetime
-try:
-    from IMDBTraktSyncer import errorHandling as EH
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import errorHandling as EH
-    import errorLogger as EL
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from IMDBTraktSyncer import errorHandling as EH
+from IMDBTraktSyncer import errorLogger as EL
 
 def getTraktData():
     # Process Trakt Ratings and Comments

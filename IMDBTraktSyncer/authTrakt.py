@@ -1,51 +1,87 @@
 import requests
 import time
-try:
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import errorLogger as EL
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from IMDBTraktSyncer import errorLogger as EL
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
-    retry_delay = 1  # seconds between retries
-    retry_attempts = 0
     
+    # Set default headers if none are provided
     if headers is None:
         headers = {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
         }
+    
+    retry_delay = 1  # Initial delay between retries (in seconds)
+    retry_attempts = 0  # Count of retry attempts made
+    connection_timeout = 20  # Timeout for requests (in seconds)
+    total_wait_time = sum(retry_delay * (2 ** i) for i in range(max_retries))  # Total possible wait time
 
+    # Retry loop to handle network errors or server overload scenarios
     while retry_attempts < max_retries:
         response = None
         try:
+            # Send GET or POST request depending on whether a payload is provided
             if payload is None:
                 if params:
-                    response = requests.get(url, headers=headers, params=params)
+                    # GET request with query parameters
+                    response = requests.get(url, headers=headers, params=params, timeout=connection_timeout)
                 else:
-                    response = requests.get(url, headers=headers)
+                    # GET request without query parameters
+                    response = requests.get(url, headers=headers, timeout=connection_timeout)
             else:
-                response = requests.post(url, headers=headers, json=payload)
+                # POST request with JSON payload
+                response = requests.post(url, headers=headers, json=payload, timeout=connection_timeout)
 
+            # If request is successful, return the response
             if response.status_code in [200, 201, 204]:
-                return response  # Request succeeded, return response
+                return response
+            
+            # Handle retryable server errors and rate limit exceeded
             elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
-                # Server overloaded or rate limit exceeded, retry after delay
-                retry_attempts += 1
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff for retries
+                retry_attempts += 1  # Increment retry counter
+
+                # Respect the 'Retry-After' header if provided, otherwise use default delay
+                retry_after = int(response.headers.get('Retry-After', retry_delay))
+                if response.status_code != 429:
+                    remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+                    print(f"   - Server returned {response.status_code}. Retrying after {retry_after}s... "
+                          f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                    EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
+                                      f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+
+                time.sleep(retry_after)  # Wait before retrying
+                retry_delay *= 2  # Apply exponential backoff for retries
+            
             else:
-                # Handle other status codes as needed
+                # Handle non-retryable HTTP status codes
                 status_message = get_trakt_message(response.status_code)
                 error_message = f"Request failed with status code {response.status_code}: {status_message}"
                 print(f"   - {error_message}")
                 EL.logger.error(f"{error_message}. URL: {url}")
-                return None
+                return None  # Exit with failure for non-retryable errors
 
-        except requests.exceptions.RequestException as e:
-            error_message = f"Request failed with exception: {e}"
+        # Handle Network errors (connection issues, timeouts, SSL, etc.)
+        except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
+            retry_attempts += 1  # Increment retry counter
+            remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+            print(f"   - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
+                  f"Time remaining: {remaining_time}s")
+            EL.logger.warning(f"Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
+                              f"Time remaining: {remaining_time}s")
+            
+            time.sleep(retry_delay)  # Wait before retrying
+            retry_delay *= 2  # Apply exponential backoff for retries
+
+        # Handle general request-related exceptions (non-retryable)
+        except requests.exceptions.RequestException as req_err:
+            error_message = f"Request failed with exception: {req_err}"
             print(f"   - {error_message}")
             EL.logger.error(error_message, exc_info=True)
-            return None
+            return None  # Exit on non-retryable exceptions
 
+    # If all retries are exhausted, log and return failure
     error_message = "Max retry attempts reached with Trakt API, request failed."
     print(f"   - {error_message}")
     EL.logger.error(error_message)
@@ -78,8 +114,6 @@ def get_trakt_message(status_code):
     }
 
     return error_messages.get(status_code, "Unknown status code")
-
-import requests
 
 def authenticate(client_id, client_secret, refresh_token=None):
     CLIENT_ID = client_id

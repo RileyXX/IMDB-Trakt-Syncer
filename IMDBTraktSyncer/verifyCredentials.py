@@ -1,18 +1,19 @@
 import os
 import json
 import datetime
-try:
-    from IMDBTraktSyncer import authTrakt
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import authTrakt
-    import errorLogger as EL
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from IMDBTraktSyncer import authTrakt
+from IMDBTraktSyncer import errorLogger as EL
+
+def print_directory(main_directory):
+    print(f"Your settings are saved at:\n{main_directory}")
 
 def prompt_get_credentials():
     # Define the file path
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
-    print(f"Your settings are saved at:\n{here}")
     
     default_values = {
         "trakt_client_id": "empty",
@@ -28,19 +29,6 @@ def prompt_get_credentials():
         # If the file does not exist or is empty, create it with default values
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(default_values, f)
-
-    # Old version support (v1.0.6 and below). Convert old credentials.txt format to json
-    if os.path.isfile(file_path):
-        with open(file_path, 'r', encoding='utf-8') as txt_file:
-            lines = txt_file.readlines()
-        if lines[0].startswith("trakt_client_id="):
-            values = {}
-            for line in lines:
-                key, value = line.strip().split("=")
-                values[key] = value
-            with open(file_path, 'w', encoding='utf-8') as txt_file:
-                json.dump(values, txt_file)
-            print("Warning: You are using a depreciated credentials.txt file.\nConversion successful: credentials.txt file converted to the new JSON format.")
 
     # Load the values from the file or initialize with default values
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -60,6 +48,15 @@ def prompt_get_credentials():
         if values[key] == "empty" and key not in ["trakt_access_token", "trakt_refresh_token"]:
             if key == "imdb_username":
                 prompt_message = f"Please enter a value for {key} (email or phone number): "
+            elif key == "trakt_client_id":
+                print("\n")
+                print("***** TRAKT API SETUP *****")
+                print("If this is your first time setting up, follow these instructions to setup your Trakt API application:")
+                print("  1. Login to Trakt and navigate to your API apps page: https://trakt.tv/oauth/applications")
+                print('  2. Create a new API application named "IMDBTraktSyncer".')
+                print('  3. In the "Redirect uri" field, enter "urn:ietf:wg:oauth:2.0:oob", then save the application.')
+                print("\n")
+                prompt_message = "Please enter your Trakt Client ID: "
             else:
                 prompt_message = f"Please enter a value for {key}: "
             values[key] = input(prompt_message).strip()
@@ -330,10 +327,3 @@ def prompt_remove_watched_from_watchlists():
 
     # return true or false
     return remove_watched_from_watchlists_value
-
-# Save the credential values as variables
-trakt_client_id, trakt_client_secret, trakt_access_token, trakt_refresh_token, imdb_username, imdb_password = prompt_get_credentials()
-sync_watchlist_value = prompt_sync_watchlist()
-sync_ratings_value = prompt_sync_ratings()
-remove_watched_from_watchlists_value = prompt_remove_watched_from_watchlists()
-sync_reviews_value = prompt_sync_reviews()

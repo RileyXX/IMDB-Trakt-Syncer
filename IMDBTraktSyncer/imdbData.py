@@ -12,13 +12,11 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
-from webdriver_manager.chrome import ChromeDriverManager
-try:
-    from IMDBTraktSyncer import errorHandling as EH
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import errorHandling as EH
-    import errorLogger as EL
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from IMDBTraktSyncer import errorHandling as EH
+from IMDBTraktSyncer import errorLogger as EL
 
 class PageLoadException(Exception):
     pass
@@ -175,7 +173,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         for file in os.listdir(directory):
             if file.endswith('.csv'):
                 os.remove(os.path.join(directory, file))
-
+        
     except (NoSuchElementException, TimeoutException):
         # No IMDB Watchlist Items
         imdb_watchlist = []

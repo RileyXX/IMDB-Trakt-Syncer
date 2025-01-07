@@ -12,12 +12,11 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
-try:
-    from IMDBTraktSyncer import verifyCredentials as VC
-    from IMDBTraktSyncer import errorLogger as EL
-except ImportError:
-    import verifyCredentials as VC
-    import errorLogger as EL
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from IMDBTraktSyncer import verifyCredentials as VC
+from IMDBTraktSyncer import errorLogger as EL
 
 class PageLoadException(Exception):
     pass
@@ -36,13 +35,16 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
+    # Get credentials
+    trakt_client_id, _, trakt_access_token, _, _, _ = VC.prompt_get_credentials()
+    
     # Set default headers if none are provided
     if headers is None:
         headers = {
             'Content-Type': 'application/json',
             'trakt-api-version': '2',
-            'trakt-api-key': VC.trakt_client_id,
-            'Authorization': f'Bearer {VC.trakt_access_token}'
+            'trakt-api-key': trakt_client_id,
+            'Authorization': f'Bearer {trakt_access_token}'
         }
     
     retry_delay = 1  # Initial delay between retries (in seconds)
@@ -266,3 +268,66 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
     # All retries failed and page was not loaded successfully, return False
     return False, None, url
+    
+def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):
+    """
+    Make an HTTP request with retry logic for handling server and connection errors.
+
+    Args:
+        url (str): The URL to request.
+        method (str): HTTP method ("GET" or "POST"). Default is "GET".
+        headers (dict): Optional headers for the request.
+        params (dict): Optional query parameters for GET requests.
+        payload (dict): Optional JSON payload for POST requests.
+        max_retries (int): Maximum number of retries. Default is 5.
+        timeout (tuple): Tuple of (connect timeout, read timeout). Default is (30, 300).
+        stream (bool): Whether to stream the response. Default is False.
+
+    Returns:
+        requests.Response: The HTTP response object if successful.
+        None: If the request fails after retries.
+    """
+    retry_delay = 1  # Initial delay between retries (seconds)
+    retry_attempts = 0
+
+    while retry_attempts < max_retries:
+        try:
+            # Make the HTTP request based on the method
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params, timeout=timeout, stream=stream)
+            elif method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=payload, timeout=timeout, stream=stream)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+
+            # Check for successful response
+            if response.status_code in [200, 201, 204]:
+                return response
+
+            # Handle retryable HTTP status codes (rate limits or server errors)
+            if response.status_code in [429, 500, 502, 503, 504]:
+                retry_after = int(response.headers.get("Retry-After", retry_delay))
+                print(f"Server error {response.status_code}. Retrying in {retry_after} seconds...")
+                time.sleep(retry_after)
+                retry_delay *= 2  # Exponential backoff
+                retry_attempts += 1
+            else:
+                # Non-retryable errors
+                print(f"Request failed with status code {response.status_code}: {response.text}")
+                return None
+
+        except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_err:
+            # Handle network-related errors
+            retry_attempts += 1
+            print(f"Network error: {network_err}. Retrying in {retry_delay} seconds... (Attempt {retry_attempts}/{max_retries})")
+            time.sleep(retry_delay)
+            retry_delay *= 2  # Exponential backoff
+
+        except RequestException as req_err:
+            # Handle non-retryable exceptions
+            print(f"Request exception: {req_err}. Exiting.")
+            return None
+
+    # If retries are exhausted, log the failure
+    print(f"Max retries reached. Request to {url} failed.")
+    return None

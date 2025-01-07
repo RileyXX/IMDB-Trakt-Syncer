@@ -10,7 +10,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), 'r', encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '3.0.3'
+VERSION = '3.1.0'
 DESCRIPTION = 'A python script that syncs user watchlist, ratings and reviews for Movies, TV Shows and Episodes both ways between Trakt and IMDB.'
 
 # Setting up
@@ -23,7 +23,10 @@ setup(
     long_description=long_description,
     url="https://github.com/RileyXX/IMDB-Trakt-Syncer",
     packages=find_packages(),
-    install_requires=['requests', 'selenium', 'webdriver-manager'],
+    install_requires=[
+        'requests>=2.32.3',
+        'selenium>=4.15.2'
+    ],
     keywords=['python', 'video', 'trakt', 'imdb', 'ratings', 'sync', 'movies', 'tv shows'],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
