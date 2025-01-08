@@ -66,6 +66,9 @@ Below is a list of available commands for this package, along with a brief descr
 Run the following commands as needed:
 
 ```bash
+# List available commands
+IMDBTraktSyncer --help
+
 # To clear user data
 IMDBTraktSyncer --clear-user-data
 
