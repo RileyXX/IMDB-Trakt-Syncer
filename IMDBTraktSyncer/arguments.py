@@ -128,6 +128,10 @@ def clear_cache(main_directory):
             # Remove .txt files (except credentials.txt)
             elif file.endswith(".txt"):
                 try_remove(file_path)
+            
+            # Remove .csv files
+            elif file.endswith(".csv"):
+                try_remove(file_path)
         
         # Delete directories after files
         for dir_name in dirs:
@@ -176,6 +180,10 @@ def uninstall(main_directory):
             # Remove .txt files (except credentials.txt)
             elif file.endswith(".txt"):
                 try_remove(file_path)
+                
+            # Remove .csv files
+            elif file.endswith(".csv"):
+                try_remove(file_path)
         
         # Delete directories after files
         for dir_name in dirs:
@@ -222,6 +230,10 @@ def clean_uninstall(main_directory):
             
             # Remove .txt files (except credentials.txt)
             elif file.endswith(".txt"):
+                try_remove(file_path)
+            
+            # Remove .csv files
+            elif file.endswith(".csv"):
                 try_remove(file_path)
         
         # Delete directories after files
