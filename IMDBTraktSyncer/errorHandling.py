@@ -35,11 +35,12 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
-    # Get credentials
-    trakt_client_id, _, trakt_access_token, _, _, _ = VC.prompt_get_credentials()
-    
+
     # Set default headers if none are provided
     if headers is None:
+        # Get credentials
+        trakt_client_id, _, trakt_access_token, _, _, _ = VC.prompt_get_credentials()
+        
         headers = {
             'Content-Type': 'application/json',
             'trakt-api-version': '2',
@@ -90,11 +91,29 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             
             else:
                 # Handle non-retryable HTTP status codes
-                status_message = get_trakt_message(response.status_code)
-                error_message = f"Request failed with status code {response.status_code}: {status_message}"
-                print(f"   - {error_message}")
-                EL.logger.error(f"{error_message}. URL: {url}")
-                return None  # Exit with failure for non-retryable errors
+                if response:
+                    status_message = get_trakt_message(response.status_code)
+                    error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                    print(f"   - {error_message}")
+                    EL.logger.error(f"{error_message}. URL: {url}")
+                else:
+                    # Handle case where response is None
+                    error_message = "Request failed with an unknown error: Response object is None."
+                    print(f"   - {error_message}")
+                    EL.logger.error(f"{error_message}. URL: {url}")
+                    
+                    # Instead of returning None, treat this as a retryable error
+                    retry_attempts += 1
+                    remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+                    print(f"   - Retrying due to network error or no response. ({retry_attempts}/{max_retries})... "
+                          f"Time remaining: {remaining_time}s")
+                    EL.logger.warning(f"Retrying due to network error or no response. ({retry_attempts}/{max_retries})... "
+                                      f"Time remaining: {remaining_time}s")
+                    
+                    time.sleep(retry_delay)  # Wait before retrying
+                    retry_delay *= 2  # Apply exponential backoff for retries
+
+                    continue  # Continue to retry
 
         # Handle Network errors (connection issues, timeouts, SSL, etc.)
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
@@ -159,6 +178,14 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
     for retry in range(max_retries):
         try:
             start_time = time.time()  # Track time taken for each retry attempt
+            
+            # Temporary solution to Chromium bug: 
+            # Open a new tab for the URL
+            driver.execute_script("window.open();")
+            # Close the current tab
+            driver.close()
+            # Switch to the new tab (last opened tab)
+            driver.switch_to.window(driver.window_handles[0])
 
             # Attempt to load the page using Selenium driver
             driver.get(url)

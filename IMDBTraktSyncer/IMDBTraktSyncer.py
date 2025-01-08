@@ -85,13 +85,13 @@ def main():
             print('Starting WebDriver...')
             
             chrome_binary_path  = CC.get_chrome_binary_path(directory)
+            user_data_directory = CC.get_user_data_directory()
             
             # Initialize Chrome options
             options = Options()
             options.binary_location = chrome_binary_path
+            options.add_argument(f"--user-data-dir={user_data_directory}")
             options.add_argument("--headless=new")
-            options.add_argument("--clear-cache")
-            options.add_argument("--clear-metadata")
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
@@ -101,7 +101,6 @@ def main():
                 "profile.password_manager_enabled": False
             })
             options.add_argument('--start-maximized')
-            options.add_argument("--disable-autofill-for-password-fields")
             options.add_argument('--disable-notifications')
             options.add_argument("--disable-third-party-cookies")
             options.add_argument("--disable-dev-shm-usage")
@@ -110,6 +109,17 @@ def main():
             options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
             options.add_experimental_option("useAutomationExtension", False)
             options.add_argument('--log-level=3')
+            
+            """
+            # Temporary solution for removing "DevTools listening on ws:" line on Windows for better readability
+            # Only use CREATE_NO_WINDOW on Windows systems (32-bit or 64-bit)
+            if sys.platform == "win32":
+                    popen_kw = {"creation_flags": 134217728}
+            else:
+                popen_kw = {}
+            
+            # service = Service(**popen_kw)
+            """
                     
             service = Service()
 
@@ -127,27 +137,6 @@ def main():
             # Example: Wait for an element and interact with it
             wait = WebDriverWait(driver, 10)
             
-            # Load sign in page
-            success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
-            if not success:
-                # Page failed to load, raise an exception
-                raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
-
-            # wait for sign in link to appear and then click it
-            sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
-            if 'IMDb' in sign_in_link.text:
-                sign_in_link.click()
-
-            # wait for email input field and password input field to appear, then enter credentials and submit
-            email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
-            password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
-            email_input.send_keys(imdb_username)
-            password_input.send_keys(imdb_password)
-            submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
-            submit_button.click()
-
-            time.sleep(2)
-
             # go to IMDB homepage
             success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
             if not success:
@@ -156,40 +145,77 @@ def main():
 
             time.sleep(2)
 
-            # Check if signed in
+            # Check if still signed in from previous session
             element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
             if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
                 print("Successfully signed in to IMDB")
             else:
-                print("\nError: Not signed in to IMDB")
-                print("\nPossible Causes and Solutions:")
-                print("- IMDB captcha check triggered or incorrect IMDB login.")
+                # Not signed in from previous session, proceed with sign in logic
+                time.sleep(2)
                 
-                print("\n1. IMDB Captcha Check:")
-                print("   If your login is correct, the issue is likely due to an IMDB captcha check.")
-                print("   To resolve this, follow these steps:")
-                print("   - Log in to IMDB on your browser (preferably Chrome) and on the same computer.")
-                print("   - If already logged in, log out and log back in.")
-                print("   - Repeat this process until a captcha check is triggered.")
-                print("   - Complete the captcha and finish logging in.")
-                print("   - After successfully logging in, run the script again.")
-                print("   - You may need to repeat these steps until the captcha check is no longer triggered.")
-                
-                print("\n2. Incorrect IMDB Login:")
-                print("   If your IMDB login is incorrect, update your login credentials:")
-                print("   - Edit the 'credentials.txt' file in your settings directory with the correct login information.")
-                print("   - Alternatively, delete the 'credentials.txt' file and run the script again.")
-                
-                print("\nFor more details, see the following GitHub link:")
-                print("https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
-                
-                print("\nStopping script...")
-                
-                EL.logger.error("Error: Not signed in to IMDB")
-                driver.close()
-                driver.quit()
-                service.stop()
-                raise SystemExit
+                # Load sign in page
+                success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
+                if not success:
+                    # Page failed to load, raise an exception
+                    raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+
+                # wait for sign in link to appear and then click it
+                sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
+                if 'IMDb' in sign_in_link.text:
+                    sign_in_link.click()
+
+                # wait for email input field and password input field to appear, then enter credentials and submit
+                email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
+                password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
+                email_input.send_keys(imdb_username)
+                password_input.send_keys(imdb_password)
+                submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
+                submit_button.click()
+
+                time.sleep(2)
+
+                # go to IMDB homepage
+                success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+                if not success:
+                    # Page failed to load, raise an exception
+                    raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+
+                time.sleep(2)
+
+                # Check if signed in
+                element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
+                if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
+                    print("Successfully signed in to IMDB")
+                else:
+                    print("\nError: Not signed in to IMDB")
+                    print("\nPossible Causes and Solutions:")
+                    print("- IMDB captcha check triggered or incorrect IMDB login.")
+                    
+                    print("\n1. IMDB Captcha Check:")
+                    print("   If your login is correct, the issue is likely due to an IMDB captcha check.")
+                    print("   To resolve this, follow these steps:")
+                    print("   - Log in to IMDB on your browser (preferably Chrome) and on the same computer.")
+                    print("   - If already logged in, log out and log back in.")
+                    print("   - Repeat this process until a captcha check is triggered.")
+                    print("   - Complete the captcha and finish logging in.")
+                    print("   - After successfully logging in, run the script again.")
+                    print("   - You may need to repeat these steps until the captcha check is no longer triggered.")
+                    
+                    print("\n2. Incorrect IMDB Login:")
+                    print("   If your IMDB login is incorrect, update your login credentials:")
+                    print("   - Edit the 'credentials.txt' file in your settings directory with the correct login information.")
+                    print("   - Alternatively, delete the 'credentials.txt' file and run the script again.")
+                    
+                    print("\nFor more details, see the following GitHub link:")
+                    print("https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/2")
+                    
+                    print("\nStopping script...")
+                    
+                    EL.logger.error("Error: Not signed in to IMDB")
+                    driver.close()
+                    driver.quit()
+                    service.stop()
+                    raise SystemExit
             
             # Check IMDB Language for compatability
             # Get Current Language
