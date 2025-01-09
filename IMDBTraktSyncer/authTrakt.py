@@ -27,8 +27,6 @@ def authenticate(client_id, client_secret, refresh_token=None):
 
         # Use make_trakt_request for the POST request
         response = EH.make_trakt_request('https://api.trakt.tv/oauth/token', headers=headers, payload=data)
-        if response is None:
-            raise Exception("Failed to authenticate. Please check your credentials.")
 
         if response:
             json_data = response.json()
