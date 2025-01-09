@@ -27,22 +27,19 @@ def prompt_get_credentials():
         "last_trakt_token_refresh": "empty"
     }
 
-    # Load or create the credentials file
-    if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
-        # If the file doesn't exist or is empty, create it with default values
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(default_values, f)
-        values = default_values
-    else:
+    # Load existing file data
+    if os.path.isfile(file_path) and os.path.getsize(file_path) > 0:
         # Read the credentials file
         with open(file_path, 'r', encoding='utf-8') as f:
             try:
-                values = json.load(f)
+                file_data = json.load(f)
             except json.decoder.JSONDecodeError:
-                values = default_values  # Handle invalid JSON
+                file_data = {}  # Handle invalid JSON
+    else:
+        file_data = {}
 
-    # Ensure all default keys are present
-    values = {key: values.get(key, default_value) for key, default_value in default_values.items()}
+    # Update only the keys related to default values
+    values = {key: file_data.get(key, default_value) for key, default_value in default_values.items()}
 
     # Prompt user for missing credentials, excluding tokens
     for key, value in values.items():
@@ -90,9 +87,12 @@ def prompt_get_credentials():
         values["trakt_refresh_token"] = trakt_refresh_token
         values["last_trakt_token_refresh"] = datetime.datetime.now().isoformat()
 
+    # Merge updated credentials back into the file data
+    file_data.update(values)
+
     # Save updated credentials back to the file
     with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(values, f)
+        json.dump(file_data, f)
 
     # Return the credentials
     return values["trakt_client_id"], values["trakt_client_secret"], values["trakt_access_token"], values["trakt_refresh_token"], values["imdb_username"], values["imdb_password"]
