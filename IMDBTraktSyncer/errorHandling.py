@@ -35,7 +35,7 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
-
+    
     # Set default headers if none are provided
     if headers is None:
         # Get credentials
@@ -91,29 +91,11 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             
             else:
                 # Handle non-retryable HTTP status codes
-                if response:
-                    status_message = get_trakt_message(response.status_code)
-                    error_message = f"Request failed with status code {response.status_code}: {status_message}"
-                    print(f"   - {error_message}")
-                    EL.logger.error(f"{error_message}. URL: {url}")
-                else:
-                    # Handle case where response is None
-                    error_message = "Request failed with an unknown error: Response object is None."
-                    print(f"   - {error_message}")
-                    EL.logger.error(f"{error_message}. URL: {url}")
-                    
-                    # Instead of returning None, treat this as a retryable error
-                    retry_attempts += 1
-                    remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
-                    print(f"   - Retrying due to network error or no response. ({retry_attempts}/{max_retries})... "
-                          f"Time remaining: {remaining_time}s")
-                    EL.logger.warning(f"Retrying due to network error or no response. ({retry_attempts}/{max_retries})... "
-                                      f"Time remaining: {remaining_time}s")
-                    
-                    time.sleep(retry_delay)  # Wait before retrying
-                    retry_delay *= 2  # Apply exponential backoff for retries
-
-                    continue  # Continue to retry
+                status_message = get_trakt_message(response.status_code)
+                error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                print(f"   - {error_message}")
+                EL.logger.error(f"{error_message}. URL: {url}")
+                return response  # Exit with failure for non-retryable errors
 
         # Handle Network errors (connection issues, timeouts, SSL, etc.)
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
