@@ -1,7 +1,6 @@
 import requests
 import time
 import sys
-from requests.exceptions import ConnectionError, RequestException, Timeout, TooManyRedirects, SSLError, ProxyError
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
@@ -28,6 +27,8 @@ def authenticate(client_id, client_secret, refresh_token=None):
 
         # Use make_trakt_request for the POST request
         response = EH.make_trakt_request('https://api.trakt.tv/oauth/token', headers=headers, payload=data)
+        if response is None:
+            raise Exception("Failed to authenticate. Please check your credentials.")
 
         if response:
             json_data = response.json()
@@ -56,6 +57,8 @@ def authenticate(client_id, client_secret, refresh_token=None):
         # After the user grants authorization, they will be redirected back to the redirect URI with a temporary authorization code.
         # Extract the authorization code from the URL and use it to request an access token from the Trakt API.
         authorization_code = input('Please enter the authorization code from the URL: ')
+        if not authorization_code.strip():
+            raise ValueError("Authorization code cannot be empty.")
 
         # Set up the access token request
         data = {
@@ -71,6 +74,8 @@ def authenticate(client_id, client_secret, refresh_token=None):
         
         # Use make_trakt_request for the POST request
         response = EH.make_trakt_request('https://api.trakt.tv/oauth/token', headers=headers, payload=data)
+        if response is None:
+            raise Exception("Failed to authenticate. Please check your credentials.")
         
         if response:
             # Parse the JSON response from the API

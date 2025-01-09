@@ -1,7 +1,8 @@
 import os
 import json
-import datetime
 import sys
+import datetime
+from datetime import timedelta
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import authTrakt
@@ -14,82 +15,87 @@ def prompt_get_credentials():
     # Define the file path
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
-    
+
+    # Default values for missing credentials
     default_values = {
         "trakt_client_id": "empty",
         "trakt_client_secret": "empty",
         "trakt_access_token": "empty",
         "trakt_refresh_token": "empty",
         "imdb_username": "empty",
-        "imdb_password": "empty"
+        "imdb_password": "empty",
+        "last_trakt_token_refresh": "empty"
     }
-    
-    # Check if the file exists
+
+    # Load or create the credentials file
     if not os.path.isfile(file_path) or os.path.getsize(file_path) == 0:
-        # If the file does not exist or is empty, create it with default values
+        # If the file doesn't exist or is empty, create it with default values
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(default_values, f)
+        values = default_values
+    else:
+        # Read the credentials file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            try:
+                values = json.load(f)
+            except json.decoder.JSONDecodeError:
+                values = default_values  # Handle invalid JSON
 
-    # Load the values from the file or initialize with default values
-    with open(file_path, 'r', encoding='utf-8') as f:
-        try:
-            values = json.load(f)
-        except json.decoder.JSONDecodeError:
-            # Handle the case where the file is empty or not a valid JSON
-            values = default_values
+    # Ensure all default keys are present
+    values = {key: values.get(key, default_value) for key, default_value in default_values.items()}
 
-    # Check if any default values are missing and add them if necessary
-    for key, default_value in default_values.items():
-        if key not in values:
-            values[key] = default_value
-
-    # Check if any of the values are "empty" and prompt the user to enter them
-    for key in values.keys():
-        if values[key] == "empty" and key not in ["trakt_access_token", "trakt_refresh_token"]:
+    # Prompt user for missing credentials, excluding tokens
+    for key, value in values.items():
+        if value == "empty" and key not in ["trakt_access_token", "trakt_refresh_token", "last_trakt_token_refresh"]:
             if key == "imdb_username":
                 prompt_message = f"Please enter a value for {key} (email or phone number): "
             elif key == "trakt_client_id":
                 print("\n")
                 print("***** TRAKT API SETUP *****")
-                print("If this is your first time setting up, follow these instructions to setup your Trakt API application:")
+                print("Follow the instructions to setup your Trakt API application:")
                 print("  1. Login to Trakt and navigate to your API apps page: https://trakt.tv/oauth/applications")
-                print('  2. Create a new API application named "IMDBTraktSyncer".')
-                print('  3. In the "Redirect uri" field, enter "urn:ietf:wg:oauth:2.0:oob", then save the application.')
+                print("  2. Create a new API application named 'IMDBTraktSyncer'.")
+                print("  3. Use 'urn:ietf:wg:oauth:2.0:oob' as the Redirect URI.")
                 print("\n")
                 prompt_message = "Please enter your Trakt Client ID: "
             else:
                 prompt_message = f"Please enter a value for {key}: "
             values[key] = input(prompt_message).strip()
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(values, f)
 
-    # Get the trakt_refresh_token_token value if it exists, or run the authTrakt.py function to get it
-    trakt_access_token = None
-    trakt_refresh_token = None
-    client_id = values["trakt_client_id"]
-    client_secret = values["trakt_client_secret"]
-    if "trakt_refresh_token" in values and values["trakt_refresh_token"] != "empty":
-        trakt_access_token = values["trakt_refresh_token"]
-        trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret, trakt_access_token)
+    # Handle token refresh if necessary
+    last_trakt_token_refresh = values.get("last_trakt_token_refresh", "empty")
+    should_refresh = True
+    if last_trakt_token_refresh != "empty":
+        try:
+            last_trakt_token_refresh_time = datetime.datetime.fromisoformat(last_trakt_token_refresh)
+            if datetime.datetime.now() - last_trakt_token_refresh_time < timedelta(days=7):
+                should_refresh = False
+        except ValueError:
+            pass  # Invalid date format, treat as refresh needed
+
+    if should_refresh:
+        trakt_access_token = None
+        trakt_refresh_token = None
+        client_id = values["trakt_client_id"]
+        client_secret = values["trakt_client_secret"]
+
+        if "trakt_refresh_token" in values and values["trakt_refresh_token"] != "empty":
+            trakt_access_token = values["trakt_refresh_token"]
+            trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret, trakt_access_token)
+        else:
+            trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret)
+
+        # Update tokens and last refresh time
         values["trakt_access_token"] = trakt_access_token
         values["trakt_refresh_token"] = trakt_refresh_token
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(values, f)
-    else:
-        trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret)
-        values["trakt_access_token"] = trakt_access_token
-        values["trakt_refresh_token"] = trakt_refresh_token
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(values, f)
+        values["last_trakt_token_refresh"] = datetime.datetime.now().isoformat()
 
-    trakt_client_id = values["trakt_client_id"]
-    trakt_client_secret = values["trakt_client_secret"]
-    trakt_access_token = values["trakt_access_token"]
-    trakt_refresh_token = values["trakt_refresh_token"]
-    imdb_username = values["imdb_username"]
-    imdb_password = values["imdb_password"]
-    
-    return trakt_client_id, trakt_client_secret, trakt_access_token, trakt_refresh_token, imdb_username, imdb_password
+    # Save updated credentials back to the file
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(values, f)
+
+    # Return the credentials
+    return values["trakt_client_id"], values["trakt_client_secret"], values["trakt_access_token"], values["trakt_refresh_token"], values["imdb_username"], values["imdb_password"]
 
 def prompt_sync_ratings():
     # Define the file path
