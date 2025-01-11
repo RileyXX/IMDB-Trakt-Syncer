@@ -55,6 +55,7 @@ Below is a list of available commands for this package, along with a brief descr
 
 | **Command**               | **Description**                                                                                       |
 |---------------------------|-------------------------------------------------------------------------------------------------------|
+| `--help`                  | List available commands                                                                               |
 | `--clear-user-data`       | Clears user-entered credentials.                                                                      |
 | `--clear-cache`           | Clears cached browsers, drivers, and error logs.                                                      |
 | `--uninstall`             | Clears cached browsers, drivers, and error logs before uninstalling.                                  |
