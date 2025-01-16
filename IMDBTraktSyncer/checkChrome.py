@@ -30,51 +30,84 @@ def try_remove(file_path, retries=3, delay=1):
     """
     for attempt in range(retries):
         try:
-            # Check if the path is a directory
             if os.path.isdir(file_path):
                 # Ensure the directory and its contents are writable
                 for root, dirs, files in os.walk(file_path, topdown=False):
                     for name in files:
                         file = os.path.join(root, name)
-                        os.chmod(file, 0o777)  # Make file writable
+                        if sys.platform != 'win32':  # chmod on Linux/macOS
+                            os.chmod(file, 0o777)  # Make file writable
                         os.remove(file)
                     for name in dirs:
                         folder = os.path.join(root, name)
-                        os.chmod(folder, 0o777)  # Make folder writable
+                        if sys.platform != 'win32':  # chmod on Linux/macOS
+                            os.chmod(folder, 0o777)  # Make folder writable
                         os.rmdir(folder)
-                os.chmod(file_path, 0o777)  # Make the top-level folder writable
+
+                if sys.platform != 'win32':  # chmod on Linux/macOS
+                    os.chmod(file_path, 0o777)  # Make the top-level folder writable
                 os.rmdir(file_path)  # Finally, remove the directory
             else:
                 # It's a file, ensure it's writable and remove it
-                os.chmod(file_path, 0o777)  # Make it writable
+                if sys.platform != 'win32':  # chmod on Linux/macOS
+                    os.chmod(file_path, 0o777)  # Make it writable
                 os.remove(file_path)
+
             print(f"Successfully removed: {file_path}")
             return True
         except PermissionError:
             print(f"Permission error for {file_path}, retrying...")
         except Exception as e:
             print(f"Error removing {file_path}: {e}")
-        
+
         time.sleep(delay)
+
+    # If running on Windows, handle read-only files
+    if sys.platform == 'win32':
+        try:
+            # Remove read-only attribute on Windows
+            if os.path.exists(file_path):
+                os.chmod(file_path, stat.S_IWRITE)  # Remove read-only attribute
+                if os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Remove non-empty directory
+                else:
+                    os.remove(file_path)
+            print(f"Successfully removed (after read-only fix): {file_path}")
+            return True
+        except Exception as e:
+            print(f"Error removing {file_path} on Windows: {e}")
+
     return False
     
 def remove_read_only_attribute(path: Path):
     """
     Recursively remove read-only attribute from a folder and its contents.
-    Ensures directories are accessible (add execute permission).
-    Compatible with macOS and Linux.
+    Ensures directories are accessible (add execute permission) and files are executable where needed.
+    Compatible with macOS, Linux, and Windows.
     """
+    # Determine the operating system
+    is_windows = sys.platform.startswith('win')
+
     for root, dirs, files in os.walk(path):
         for item in dirs + files:
             item_path = Path(root) / item
             try:
-                # Add write permission for the owner
-                current_permissions = item_path.stat().st_mode
-                item_path.chmod(current_permissions | 0o200)  # Add write permission (u+w)
+                # For Windows: Ensure the file is not read-only
+                if is_windows:
+                    # Set the read-only attribute to False for files (Windows)
+                    os.chmod(item_path, item_path.stat().st_mode & ~stat.S_IREAD)  # Remove read-only attribute
+                else:
+                    # For Linux/macOS, add write permissions
+                    current_permissions = item_path.stat().st_mode
+                    item_path.chmod(current_permissions | 0o777)  # Add write permission (u+w)
 
-                # Ensure directories are executable
-                if item_path.is_dir():
-                    item_path.chmod(current_permissions | 0o100)  # Add execute permission (u+x) for directories
+                    # Ensure directories are executable
+                    if item_path.is_dir():
+                        item_path.chmod(current_permissions | 0o777)  # Add execute permission (u+x) for directories
+                    else:
+                        # For files (including chromedriver), make sure they are executable
+                        item_path.chmod(current_permissions | 0o777)  # Add execute permission (u+x, g+x, o+x) for files
+
             except PermissionError:
                 print(f"Permission denied: Unable to modify {item_path}")
             except Exception as e:
