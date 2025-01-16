@@ -165,19 +165,21 @@ def is_chrome_up_to_date(main_directory, current_version):
 
     platform_key = get_platform()
     binary_names = platform_binary.get(platform_key, ["chrome-headless-shell", "chrome"])  # Default to both names
-
+                
     # Logic for macOS special cases
     if platform_key in ["mac-arm64", "mac-x64"]:
-        for binary_name in binary_names:
-            if binary_name == "Google Chrome for Testing":
-                # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
-                binary_path = chrome_dir / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
-            else:
-                # For macOS headless shell, the binary is directly under the version directory
-                binary_path = chrome_dir / binary_name
+        for subfolder in chrome_dir.iterdir():
+            if subfolder.is_dir():
+                for binary_name in binary_names:
+                    if binary_name == "Google Chrome for Testing":
+                        # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
+                        binary_path = chrome_dir / subfolder / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+                    else:
+                        # For macOS headless shell, the binary is directly under the version directory
+                        binary_path = chrome_dir / subfolder / binary_name
 
-            if binary_path.exists():
-                return True
+                    if binary_path.exists():
+                        return True
 
     # General case for other platforms
     for subfolder in chrome_dir.iterdir():
