@@ -154,83 +154,74 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
     wait_time = total_wait_time / num_retries
     max_retries = num_retries
     status_code = None
-    was_retry = False  # Flag to track if a retry occurred
     total_time_spent = 0  # Track total time spent across retries
 
     for retry in range(max_retries):
         try:
             start_time = time.time()  # Track time taken for each retry attempt
-            
-            # Temporary solution to Chromium bug: 
-            # Open a new tab for the URL
+
+            # Temporary solution to Chromium bug: Restart tab logic
             driver.execute_script("window.open();")
-            # Close the current tab
             driver.close()
-            # Switch to the new tab (last opened tab)
             driver.switch_to.window(driver.window_handles[0])
 
             # Attempt to load the page using Selenium driver
             driver.get(url)
-            
+
             # Wait until the status code becomes available
             wait.until(lambda driver: driver.execute_script(
                 "return window.performance.getEntries().length > 0 && window.performance.getEntries()[0].responseStatus !== undefined"
             ))
-            
+
             # Get the HTTP status code of the page using JavaScript
             status_code = driver.execute_script(
                 "return window.performance.getEntries()[0].responseStatus;"
             )
-            
-            # Check for any error codes or if status_code is None
+
+            # Handle status codes
             if status_code is None or status_code == 0:
-                print(f"   - Unable to determine page load status. Status code returned 0 or None. Possible network or server error. URL: {url} Retrying...")
+                print(f"   - Unable to determine page load status. Status code returned 0 or None. Retrying...")
                 elapsed_time = time.time() - start_time  # Time taken for this attempt
-                total_time_spent += elapsed_time  # Update total time spent
-                
-                # Calculate the remaining time before the next retry
-                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
-                print(f"   - Remaining time for retries: {seconds_left} seconds.")
-                
-                was_retry = True  # Set flag to indicate a retry occurred
-                continue  # Retry immediately if status_code is None or 0
+                total_time_spent += elapsed_time
+
+                if total_time_spent >= total_wait_time:
+                    print("   - Total wait time exceeded. Aborting.")
+                    return False, None, url
+
+                print(f"   - Remaining time for retries: {int(total_wait_time - total_time_spent)} seconds.")
+                time.sleep(wait_time)
+                continue
+
             elif status_code >= 400:
                 raise PageLoadException(f'Failed to load page. Status code: {status_code}. URL: {url}')
+
             else:
-                if was_retry:
-                    print("   - Retry successful! Continuing...")
-                    was_retry = False  # Reset flag
-                return True, status_code, url  # Page loaded successfully
+                # Page loaded successfully
+                return True, status_code, url
 
         except TimeoutException as e:
-            # Handle page load timeout explicitly
-            frame = inspect.currentframe()  # Get the current frame
-            lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
-            print(f"   - TimeoutException: Page load timed out. Retrying... {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
-            elapsed_time = time.time() - start_time  # Time taken for this attempt
-            
-            # Update total time spent
+            frame = inspect.currentframe()
+            lineno = frame.f_lineno
+            filename = os.path.basename(inspect.getfile(frame))
+            print(f"   - TimeoutException: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
+
+            elapsed_time = time.time() - start_time
             total_time_spent += elapsed_time
-            
-            if retry + 1 < max_retries:
-                seconds_left = int((total_wait_time - total_time_spent))
-                print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {seconds_left}s")
-                time.sleep(wait_time)
-                was_retry = True  # Set flag to indicate a retry occurred
-                continue
-            else:
-                print("   - Max retries reached or not retrying after timeout.")
-                return False, status_code, url
+
+            if total_time_spent >= total_wait_time:
+                print("   - Total wait time exceeded. Aborting after timeout.")
+                return False, None, url
+
+            print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {int(total_wait_time - total_time_spent)}s")
+            time.sleep(wait_time)
+            continue
 
         except WebDriverException as e:
-            # Handle Selenium-related network errors
-            frame = inspect.currentframe()  # Get the current frame
-            lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
+            frame = inspect.currentframe()
+            lineno = frame.f_lineno
+            filename = os.path.basename(inspect.getfile(frame))
             print(f"   - Selenium WebDriver Error: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
 
-            # Check for retryable errors
             retryable_errors = [
                 "net::ERR_NAME_NOT_RESOLVED",
                 "net::ERR_DNS_TIMED_OUT",
@@ -244,38 +235,48 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 "net::ERR_CERT_DATE_INVALID",
                 "net::ERR_NETWORK_CHANGED"
             ]
+
             if any(error in str(e) for error in retryable_errors):
-                # Calculate the time remaining before the next retry
-                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
-                print(f"   - Retryable network error detected: {str(e).splitlines()[0]} Retrying... Time Remaining: {seconds_left}s")
-            elif retry + 1 < max_retries:
-                seconds_left = int((max_retries - retry) * wait_time)
-                print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {seconds_left}s")
+                elapsed_time = time.time() - start_time
+                total_time_spent += elapsed_time
+
+                if total_time_spent >= total_wait_time:
+                    print("   - Total wait time exceeded. Aborting after WebDriver error.")
+                    return False, None, url
+
+                print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
                 time.sleep(wait_time)
-                was_retry = True  # Set flag to indicate a retry occurred
                 continue
+
             else:
-                print("   - Max retries reached or not retrying.")
-                return False, status_code, url
+                print("   - Non-retryable WebDriver error encountered. Aborting.")
+                return False, None, url
 
         except PageLoadException as e:
-            frame = inspect.currentframe()  # Get the current frame
-            lineno = frame.f_lineno  # Get the line number where the exception occurred
-            filename = os.path.basename(inspect.getfile(frame))  # Get only the file name where the exception occurred
-            print(f"   - Error: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
-            retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
-            if retry + 1 < max_retries and status_code in retryable_error_codes:
-                # Calculate the time remaining before the next retry
-                seconds_left = int((total_wait_time - total_time_spent) - (retry * wait_time))
-                print(f"   - Retryable PageLoadException error detected: {str(e).splitlines()[0]} Retrying... Time Remaining: {seconds_left}s")
-                time.sleep(wait_time)
-                was_retry = True  # Set flag to indicate a retry occurred
-                continue
-            else:
-                print("   - Max retries reached. PageLoadException.")
-                return False, status_code, url
+            frame = inspect.currentframe()
+            lineno = frame.f_lineno
+            filename = os.path.basename(inspect.getfile(frame))
+            print(f"   - PageLoadException: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
 
-    # All retries failed and page was not loaded successfully, return False
+            retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
+
+            if status_code in retryable_error_codes:
+                elapsed_time = time.time() - start_time
+                total_time_spent += elapsed_time
+
+                if total_time_spent >= total_wait_time:
+                    print("   - Total wait time exceeded. Aborting after page load exception.")
+                    return False, None, url
+
+                print(f"   - Retryable error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
+                time.sleep(wait_time)
+                continue
+
+            else:
+                print("   - Non-retryable error encountered. Aborting.")
+                return False, None, url
+
+    print("   - All retries failed. Unable to load page.")
     return False, None, url
     
 def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):

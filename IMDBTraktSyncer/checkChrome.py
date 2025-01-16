@@ -7,6 +7,7 @@ import sys
 import time
 import subprocess
 import tempfile
+import stat
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -79,7 +80,7 @@ def try_remove(file_path, retries=3, delay=1):
 
     return False
     
-def remove_read_only_attribute(path: Path):
+def grant_permissions(path: Path):
     """
     Recursively remove read-only attribute from a folder and its contents.
     Ensures directories are accessible (add execute permission) and files are executable where needed.
@@ -137,7 +138,7 @@ def get_user_data_directory():
     user_data_directory.mkdir(parents=True, exist_ok=True)
 
     # Remove "read-only" attribute
-    remove_read_only_attribute(user_data_directory)
+    grant_permissions(user_data_directory)
 
     return user_data_directory
 
@@ -310,7 +311,7 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
         print(f" - Extraction complete to: {extract_path}")
         
         # Remove read-only attribute from the extracted folder
-        remove_read_only_attribute(extract_path)
+        grant_permissions(extract_path)
 
     except Exception as e:
         raise RuntimeError(f" - Failed to download or extract Chrome version {version}: {e}")
@@ -392,7 +393,7 @@ def download_and_extract_chromedriver(download_url, main_directory, version, max
         print(f" - Extraction complete to: {extract_path}")
         
         # Remove read-only attribute from the extracted folder
-        remove_read_only_attribute(extract_path)
+        grant_permissions(extract_path)
 
     except Exception as e:
         raise RuntimeError(f" - Failed to download or extract Chromedriver version {version}: {e}")
@@ -646,6 +647,9 @@ def checkChrome():
     
     # Always remove old versions, even if the latest version is already downloaded
     remove_old_versions(main_directory, latest_version, browser_type)
+    
+    # Remove "read-only" attribute
+    grant_permissions(main_directory)
 
     # Check if the latest versions of Chrome and Chromedriver are already downloaded
     if is_chrome_up_to_date(main_directory, latest_version) and is_chromedriver_up_to_date(main_directory, latest_version):
