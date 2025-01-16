@@ -59,11 +59,26 @@ def try_remove(file_path, retries=3, delay=1):
     return False
     
 def remove_read_only_attribute(path: Path):
-    # Recursively remove read-only attribute from a folder and its contents
+    """
+    Recursively remove read-only attribute from a folder and its contents.
+    Ensures directories are accessible (add execute permission).
+    Compatible with macOS and Linux.
+    """
     for root, dirs, files in os.walk(path):
         for item in dirs + files:
             item_path = Path(root) / item
-            item_path.chmod(item_path.stat().st_mode | 0o200)  # Remove read-only attribute
+            try:
+                # Add write permission for the owner
+                current_permissions = item_path.stat().st_mode
+                item_path.chmod(current_permissions | 0o200)  # Add write permission (u+w)
+
+                # Ensure directories are executable
+                if item_path.is_dir():
+                    item_path.chmod(current_permissions | 0o100)  # Add execute permission (u+x) for directories
+            except PermissionError:
+                print(f"Permission denied: Unable to modify {item_path}")
+            except Exception as e:
+                print(f"Error modifying permissions for {item_path}: {e}")
 
 def get_user_data_directory():
     directory = os.path.dirname(os.path.realpath(__file__))  # Current script's directory
@@ -234,7 +249,7 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
             raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
 
         # Move the temp file to the final location
-        temp_zip_path.rename(zip_path)
+        shutil.move(str(temp_zip_path), str(zip_path))
         print(f" - Download complete. File moved to: {zip_path}")
 
         # Verify the integrity of the ZIP file before extraction
@@ -316,7 +331,7 @@ def download_and_extract_chromedriver(download_url, main_directory, version, max
             raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
 
         # Move the temp file to the final location
-        temp_zip_path.rename(zip_path)
+        shutil.move(str(temp_zip_path), str(zip_path))
         print(f" - Download complete. File moved to: {zip_path}")
 
         # Verify the integrity of the ZIP file before extraction
@@ -398,8 +413,9 @@ def remove_old_versions(main_directory, latest_version, browser_type):
 def get_chrome_binary_path(main_directory):
     version = get_latest_stable_version()
 
+    # Build the path to the version directory
     chrome_dir = Path(main_directory) / "Chrome" / version
-    
+
     if not chrome_dir.exists():
         raise FileNotFoundError(f"Chrome version {version} not found in {chrome_dir}")
 
@@ -407,15 +423,28 @@ def get_chrome_binary_path(main_directory):
     platform_binary = {
         "win32": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
         "win64": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
-        "mac-arm64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
-        "mac-x64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
+        "mac-arm64": ["chrome-headless-shell", "Google Chrome for Testing"],  # Updated for macOS
+        "mac-x64": ["chrome-headless-shell", "Google Chrome for Testing"],  # Updated for macOS
         "linux64": ["chrome-headless-shell", "chrome"]  # Two possible filenames for Linux
     }
 
-    platform_key = get_platform()
+    platform_key = get_platform()  # Get the platform key (e.g., win32, mac-arm64, etc.)
     binary_names = platform_binary.get(platform_key, ["chrome-headless-shell", "chrome"])  # Default to both names
 
-    # Look for the binary in the version directory
+    # Logic for macOS special cases
+    if platform_key in ["mac-arm64", "mac-x64"]:
+        for binary_name in binary_names:
+            if binary_name == "Google Chrome for Testing":
+                # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
+                binary_path = chrome_dir / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+            else:
+                # For macOS headless shell, the binary is directly under the version directory
+                binary_path = chrome_dir / binary_name
+
+            if binary_path.exists():
+                return str(binary_path)
+
+    # General case for other platforms
     for subfolder in chrome_dir.iterdir():
         if subfolder.is_dir():
             for binary_name in binary_names:
@@ -423,7 +452,7 @@ def get_chrome_binary_path(main_directory):
                 if binary_path.exists():  # Check if the binary file exists
                     return str(binary_path)
 
-    raise FileNotFoundError(f"Chrome binary not found under {chrome_dir}.")
+    raise FileNotFoundError(f"No valid Chrome binary found for platform {platform_key} in {chrome_dir}")
     
 def get_chromedriver_binary_path(main_directory):
     version = get_latest_stable_version()
@@ -479,7 +508,7 @@ def get_selenium_install_location():
         for line in result.stdout.splitlines():
             if line.startswith("Location:"):
                 site_packages_directory = line.split("Location:")[1].strip()
-                selenium_directory = f"{site_packages_directory}\\selenium"
+                selenium_directory = os.path.join(site_packages_directory, 'selenium')
                 return selenium_directory
     except Exception as e:
         print("Error finding Selenium install location using pip show:", e)
