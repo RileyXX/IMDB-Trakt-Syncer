@@ -158,21 +158,35 @@ def is_chrome_up_to_date(main_directory, current_version):
     platform_binary = {
         "win32": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
         "win64": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
-        "mac-arm64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
-        "mac-x64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
+        "mac-arm64": ["chrome-headless-shell", "Google Chrome for Testing"],  # Two possible filenames for macOS
+        "mac-x64": ["chrome-headless-shell", "Google Chrome for Testing"],  # Two possible filenames for macOS
         "linux64": ["chrome-headless-shell", "chrome"]  # Two possible filenames for Linux
     }
 
     platform_key = get_platform()
     binary_names = platform_binary.get(platform_key, ["chrome-headless-shell", "chrome"])  # Default to both names
+                
+    # Logic for macOS special cases
+    if platform_key in ["mac-arm64", "mac-x64"]:
+        for subfolder in chrome_dir.iterdir():
+            if subfolder.is_dir():
+                for binary_name in binary_names:
+                    if binary_name == "Google Chrome for Testing":
+                        # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
+                        binary_path = chrome_dir / subfolder / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+                    else:
+                        # For macOS headless shell, the binary is directly under the version directory
+                        binary_path = chrome_dir / subfolder / binary_name
 
-    # Handle the additional subfolder under version
+                    if binary_path.exists():
+                        return True
+
+    # General case for other platforms
     for subfolder in chrome_dir.iterdir():
         if subfolder.is_dir():
-            # Check both possible filenames
             for binary_name in binary_names:
                 binary_path = subfolder / binary_name
-                if binary_path.exists():
+                if binary_path.exists():  # Check if the binary file exists
                     return True
 
     print(f"Chrome binary not found under {chrome_dir}.")
@@ -351,8 +365,25 @@ def download_and_extract_chromedriver(download_url, main_directory, version, max
         raise RuntimeError(f" - Failed to download or extract Chromedriver version {version}: {e}")
 
     finally:
-        # Cleanup the ZIP file
+        # Clean up extracted files (excluding the chromedriver executable)
         try:
+            # Get the path to the extracted directory
+            chromedriver_dir = Path(extract_path)
+
+            # Clean up all files except the chromedriver executable
+            if chromedriver_dir.exists():
+                for item in chromedriver_dir.iterdir():
+                    # Check if the item is a subfolder (assumed to be the one containing the binary files)
+                    if item.is_dir():
+                        subfolder = item
+                        # Now, clean up files inside the subfolder
+                        for sub_item in subfolder.iterdir():
+                            # Skip deleting chromedriver executable
+                            if sub_item.name.lower() in ["chromedriver.exe", "chromedriver"]:
+                                continue
+                            try_remove(sub_item)  # Remove other files
+
+            # Cleanup the ZIP file
             if zip_path.exists():
                 zip_path.unlink()
                 print(f" - File {zip_path} deleted.")
@@ -377,15 +408,17 @@ def remove_old_versions(main_directory, latest_version, browser_type):
     chrome_dir = Path(main_directory) / "Chrome"
     chromedriver_dir = Path(main_directory) / "Chromedriver"
 
-    # Check for browser_type conditions
+    # Delete downloaded browser if not the correct type (chrome vs chrome-headless-shell)
     if browser_type == "chrome":
         for version_dir in chrome_dir.iterdir():
             if version_dir.is_dir():
                 for sub_dir in version_dir.iterdir():
                     if sub_dir.is_dir():
-                        headless_shell_path = sub_dir / "chrome-headless-shell.exe" if os.name == "nt" else sub_dir / "chrome-headless-shell"
+                        # All platforms (including macOS) use the same path for chrome-headless-shell
+                        headless_shell_path = sub_dir / "chrome-headless-shell" if os.name != "nt" else sub_dir / "chrome-headless-shell.exe"
+                        
                         if headless_shell_path.exists():
-                            print(f"chrome-headless-shell found in {headless_shell_path}. Removing entire contents of {chrome_dir}...")
+                            print(f"chrome-headless-shell found in {headless_shell_path}, but script is set to use regular Chrome. Removing entire contents of {chrome_dir}...")
                             try_remove(version_dir)
                             return  # Exit the function after removal
     elif browser_type == "chrome-headless-shell":
@@ -393,9 +426,14 @@ def remove_old_versions(main_directory, latest_version, browser_type):
             if version_dir.is_dir():
                 for sub_dir in version_dir.iterdir():
                     if sub_dir.is_dir():
-                        chrome_path = sub_dir / "chrome.exe" if os.name == "nt" else sub_dir / "chrome"
+                        # macOS-specific path for regular Chrome binary
+                        if os.name == "posix":  # macOS
+                            chrome_path = sub_dir / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+                        else:  # Windows or Linux
+                            chrome_path = sub_dir / "chrome" if os.name != "nt" else sub_dir / "chrome.exe"
+                        
                         if chrome_path.exists():
-                            print(f"chrome found in {chrome_path}. Removing entire contents of {chrome_dir}...")
+                            print(f"Chrome found in {chrome_path}, but script is set to use chrome-headless-shell. Removing entire contents of {chrome_dir}...")
                             try_remove(version_dir)
                             return  # Exit the function after removal
 
@@ -433,16 +471,18 @@ def get_chrome_binary_path(main_directory):
 
     # Logic for macOS special cases
     if platform_key in ["mac-arm64", "mac-x64"]:
-        for binary_name in binary_names:
-            if binary_name == "Google Chrome for Testing":
-                # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
-                binary_path = chrome_dir / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
-            else:
-                # For macOS headless shell, the binary is directly under the version directory
-                binary_path = chrome_dir / binary_name
+        for subfolder in chrome_dir.iterdir():
+            if subfolder.is_dir():
+                for binary_name in binary_names:
+                    if binary_name == "Google Chrome for Testing":
+                        # For macOS regular Chrome, the binary is inside the .app bundle in the version directory
+                        binary_path = chrome_dir / subfolder / "Google Chrome for Testing.app" / "Contents" / "MacOS" / "Google Chrome for Testing"
+                    else:
+                        # For macOS headless shell, the binary is directly under the version directory
+                        binary_path = chrome_dir / subfolder / binary_name
 
-            if binary_path.exists():
-                return str(binary_path)
+                    if binary_path.exists():
+                        return str(binary_path)
 
     # General case for other platforms
     for subfolder in chrome_dir.iterdir():
