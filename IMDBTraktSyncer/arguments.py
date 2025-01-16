@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import os
 import platform
+import shlex
 
 def try_remove(file_path, retries=3, delay=1):
     """
@@ -44,36 +45,57 @@ def try_remove(file_path, retries=3, delay=1):
         time.sleep(delay)
     return False
 
-def delete_chromedriver_cache():
-    # Clear selenium chromedriver cache
+def get_selenium_install_location():
     try:
-        # Get the path to the chromedriver cache directory
-        if platform.system() == "Windows":
-            # Use the 'USERPROFILE' environment variable to get the correct user folder on Windows
-            user_profile = os.environ.get('USERPROFILE', '')
-            chromedriver_cache = os.path.join(user_profile, '.cache', 'selenium', 'chromedriver')
-        else:
-            # On macOS/Linux, use the home directory
-            chromedriver_cache = os.path.expanduser('~/.cache/selenium/chromedriver')
-
-        # Check if the path exists
-        if os.path.exists(chromedriver_cache):
-            # Iterate through the folder and delete all files and subdirectories
-            for root, dirs, files in os.walk(chromedriver_cache, topdown=False):
-                for name in files:
-                    file_path = os.path.join(root, name)
-                    if not try_remove(file_path):
-                        print(f"Failed to remove file: {file_path}")
-                for name in dirs:
-                    dir_path = os.path.join(root, name)
-                    if not try_remove(dir_path):
-                        print(f"Failed to remove directory: {dir_path}")
-            print(f"Selenium Chromedriver cache cleared at: {chromedriver_cache}")
-        else:
-            print(f"The path {chromedriver_cache} does not exist.")
-
+        # Use pip show to get Selenium installation details
+        result = subprocess.run([sys.executable, '-m', 'pip', 'show', 'selenium'], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        for line in result.stdout.splitlines():
+            if line.startswith("Location:"):
+                return line.split("Location:")[1].strip()
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print("Error finding Selenium install location using pip show:", e)
+        return None
+
+def clear_selenium_manager_cache():
+    try:
+        # Get the Selenium install location
+        selenium_install_location = get_selenium_install_location()
+        if not selenium_install_location:
+            print("Could not determine Selenium install location. Skipping cache clear.")
+            return
+
+        webdriver_common_path = os.path.join(selenium_install_location, "webdriver", "common")
+
+        # Determine the OS and set the appropriate folder and file name
+        os_name = platform.system().lower()
+
+        if os_name == "windows":
+            selenium_manager_path = os.path.join(webdriver_common_path, "windows", "selenium-manager.exe")
+        elif os_name == "linux":
+            selenium_manager_path = os.path.join(webdriver_common_path, "linux", "selenium-manager")
+        elif os_name == "darwin":  # macOS
+            selenium_manager_path = os.path.join(webdriver_common_path, "macos", "selenium-manager")
+        else:
+            print("Unsupported operating system.")
+            return
+
+        # Ensure the Selenium Manager file exists
+        if not os.path.isfile(selenium_manager_path):
+            print(f"Selenium Manager file not found at: {selenium_manager_path}")
+            return
+
+        # Build the command
+        command = f"{selenium_manager_path} --clear-cache --browser chrome --driver chromedriver"
+
+        try:
+            # Run the command
+            result = subprocess.run(shlex.split(command), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            print("Command output:", result.stdout)
+        except subprocess.CalledProcessError as e:
+            print("Error running Selenium Manager command:", e.stderr)
+    except Exception as e:
+        print("An unexpected error occurred:", e)
 
 def clear_user_data(main_directory):
     """
@@ -147,13 +169,13 @@ def clear_cache(main_directory):
                 print(f"Error removing directory {dir_path}: {e}")
         
     # Clear selenium chromedriver cache
-    delete_chromedriver_cache()
+    clear_selenium_manager_cache()
     
     print("Clear cache complete.")
     
 def uninstall(main_directory):
     """
-    Deletes all folders, .zip files, .txt files (except credentials.txt) in the given directory and clears selenium chromedriver cache before uninstalling.
+    Deletes all folders, .zip files, .txt files (except credentials.txt and log.txt) in the given directory and clears selenium chromedriver cache before uninstalling.
         
     :param main_directory: Directory path where data should be cleared.
     """
@@ -169,7 +191,7 @@ def uninstall(main_directory):
             file_path = os.path.join(root, file)
             
             # Skip deleting credentials.txt
-            if file == "credentials.txt":
+            if file in ["credentials.txt", "log.txt"]:
                 print(f"Skipping {file_path} (credentials.txt)")
                 continue  # Skip this file
             
@@ -199,7 +221,7 @@ def uninstall(main_directory):
                 print(f"Error removing directory {dir_path}: {e}")
     
     # Clear selenium chromedriver cache
-    delete_chromedriver_cache()
+    clear_selenium_manager_cache()
                 
     # Uninstall the package
     print("Uninstalling the package...")
@@ -250,7 +272,7 @@ def clean_uninstall(main_directory):
                 print(f"Error removing directory {dir_path}: {e}")
     
     # Clear selenium chromedriver cache
-    delete_chromedriver_cache()
+    clear_selenium_manager_cache()
                 
     # Uninstall the package
     print("Uninstalling the package...")

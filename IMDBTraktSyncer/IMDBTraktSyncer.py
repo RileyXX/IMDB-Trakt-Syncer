@@ -4,6 +4,7 @@ import requests
 import time
 import sys
 import argparse
+import subprocess
 from datetime import datetime, timezone, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -25,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description="IMDBTraktSyncer CLI")
     parser.add_argument("--clear-user-data", action="store_true", help="Clears user entered credentials.")
     parser.add_argument("--clear-cache", action="store_true", help="Clears cached browsers, drivers and error logs.")
-    parser.add_argument("--uninstall", action="store_true", help="Clears cached browsers, drivers and error logs before uninstalling.")
+    parser.add_argument("--uninstall", action="store_true", help="Clears cached browsers and drivers before uninstalling.")
     parser.add_argument("--clean-uninstall", action="store_true", help="Clears all cached data, inluding user credentials, cached browsers and drivers before uninstalling.")
     parser.add_argument("--directory", action="store_true", help="Prints the package install directory.")
     
@@ -85,6 +86,7 @@ def main():
             print('Starting WebDriver...')
             
             chrome_binary_path  = CC.get_chrome_binary_path(directory)
+            chromedriver_binary_path  = CC.get_chromedriver_binary_path(directory)
             user_data_directory = CC.get_user_data_directory()
             
             # Initialize Chrome options
@@ -100,6 +102,7 @@ def main():
                 "credentials_enable_service": False,
                 "profile.password_manager_enabled": False
             })
+            options.add_argument('--disable-gpu')
             options.add_argument('--start-maximized')
             options.add_argument('--disable-notifications')
             options.add_argument("--disable-third-party-cookies")
@@ -107,21 +110,15 @@ def main():
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-extensions")
             options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-            options.add_experimental_option("useAutomationExtension", False)
             options.add_argument('--log-level=3')
+                
+            service = Service(executable_path=chromedriver_binary_path)
             
-            """
             # Temporary solution for removing "DevTools listening on ws:" line on Windows for better readability
             # Only use CREATE_NO_WINDOW on Windows systems (32-bit or 64-bit)
             if sys.platform == "win32":
-                    popen_kw = {"creation_flags": 134217728}
-            else:
-                popen_kw = {}
-            
-            # service = Service(**popen_kw)
-            """
-                    
-            service = Service()
+                creation_flags = subprocess.CREATE_NO_WINDOW
+                service.creation_flags = creation_flags
 
             try:
                 # Initialize WebDriver with the given options and service
@@ -133,7 +130,7 @@ def main():
                 print(f"{error_message}")
                 EL.logger.error(error_message)
                 raise SystemExit
-
+            
             # Example: Wait for an element and interact with it
             wait = WebDriverWait(driver, 10)
             
@@ -240,6 +237,7 @@ def main():
             imdb_reviews = [review for review in imdb_reviews if review.get('IMDB_ID') is not None]
             trakt_watchlist = [item for item in trakt_watchlist if item.get('IMDB_ID') is not None]
             imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
+            
             # Filter out items already set
             imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['IMDB_ID'] not in [imdb_rating['IMDB_ID'] for imdb_rating in imdb_ratings]]
             trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['IMDB_ID'] not in [trakt_rating['IMDB_ID'] for trakt_rating in trakt_ratings]]
@@ -573,12 +571,12 @@ def main():
                         num_items = len(trakt_reviews_to_set)
                         item_count = 0
 
-                        for review in trakt_reviews_to_set:
+                        for item in trakt_reviews_to_set:
                             item_count += 1
-                            print(f" - Submitting comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt ({item['IMDB_ID']})")
-                            imdb_id = review['IMDB_ID']
-                            comment = review['Comment']
-                            media_type = review['Type']  # 'movie', 'show', or 'episode'
+                            print(f" - Submitting comment ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on Trakt ({item['IMDB_ID']})")
+                            imdb_id = item['IMDB_ID']
+                            comment = item['Comment']
+                            media_type = item['Type']  # 'movie', 'show', or 'episode'
 
                             url = f"https://api.trakt.tv/comments"
 
@@ -611,7 +609,7 @@ def main():
                                 response = EH.make_trakt_request(url, payload=data)
                                 
                                 if response is None:
-                                    error_message = f"Failed to submit comment ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on Trakt ({item['IMDB_ID']})"
+                                    error_message = f"Failed to submit comment ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on Trakt ({item['IMDB_ID']})"
                                     print(f"   - {error_message}")
                                     EL.logger.error(error_message)
 
@@ -629,13 +627,13 @@ def main():
                             num_items = len(imdb_reviews_to_set)
                             item_count = 0
                             
-                            for review in imdb_reviews_to_set:
+                            for item in imdb_reviews_to_set:
                                 item_count += 1
                                 try:
-                                    print(f" - Submitting review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})")
+                                    print(f" - Submitting review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
-                                    success, status_code, url = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{review["IMDB_ID"]}/add?bus=imdb', driver, wait)
+                                    success, status_code, url = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
                                     if not success:
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -644,12 +642,12 @@ def main():
                                     review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
                                     
                                     review_title_input.send_keys("My Review")
-                                    review_input.send_keys(review["Comment"])
+                                    review_input.send_keys(item["Comment"])
                                     
                                     no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
                                     yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
                                     
-                                    if review["Spoiler"]:
+                                    if item["Spoiler"]:
                                         yes_element.click()                        
                                     else:
                                         no_element.click()
@@ -660,7 +658,7 @@ def main():
                                     
                                     time.sleep(3) # wait for rating to submit
                                 except (NoSuchElementException, TimeoutException, PageLoadException):
-                                    error_message = f"Failed to submit review ({item_count} of {num_items}): {review['Title']} ({review['Year']}) on IMDB ({item['IMDB_ID']})"
+                                    error_message = f"Failed to submit review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})"
                                     print(f"   - {error_message}")
                                     EL.logger.error(error_message, exc_info=True)
                                     pass

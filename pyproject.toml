@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "IMDBTraktSyncer"
+version = "3.2.2"
+description = "A python script that syncs user watchlist, ratings and reviews for Movies, TV Shows and Episodes both ways between Trakt and IMDB."
+authors = [
+    {name = "RileyXX"}
+]
+license = {file = "LICENSE"}
+readme = "README.md"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+]
+requires-python = ">=3.6"
+
+dependencies = [
+  "requests>=2.32.3",
+  "selenium>=4.15.2"
+]
+
+[project.urls]
+homepage = "https://github.com/RileyXX/IMDB-Trakt-Syncer"
+issues = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues"
+changelog = "https://github.com/RileyXX/IMDB-Trakt-Syncer/releases"
+funding = "https://github.com/sponsors/RileyXX"
+repository = "https://github.com/RileyXX/IMDB-Trakt-Syncer"
+documentation = "https://github.com/RileyXX/IMDB-Trakt-Syncer"
+
+[project.scripts]
+IMDBTraktSyncer = "IMDBTraktSyncer.IMDBTraktSyncer:main"
+
+[tool.setuptools]
+packages = ["IMDBTraktSyncer"]

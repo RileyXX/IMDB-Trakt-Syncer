@@ -5,6 +5,8 @@ import shutil
 import platform
 import sys
 import time
+import subprocess
+import tempfile
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -16,6 +18,45 @@ from IMDBTraktSyncer import errorLogger as EL
 def get_main_directory():
     directory = os.path.dirname(os.path.realpath(__file__))
     return directory
+
+def try_remove(file_path, retries=3, delay=1):
+    """
+    Tries to remove a file or directory, retrying if it's in use or read-only.
+
+    :param file_path: The path of the file or directory to be removed.
+    :param retries: Number of retries before giving up.
+    :param delay: Time in seconds between retries.
+    :return: True if the file/directory is successfully removed, False otherwise.
+    """
+    for attempt in range(retries):
+        try:
+            # Check if the path is a directory
+            if os.path.isdir(file_path):
+                # Ensure the directory and its contents are writable
+                for root, dirs, files in os.walk(file_path, topdown=False):
+                    for name in files:
+                        file = os.path.join(root, name)
+                        os.chmod(file, 0o777)  # Make file writable
+                        os.remove(file)
+                    for name in dirs:
+                        folder = os.path.join(root, name)
+                        os.chmod(folder, 0o777)  # Make folder writable
+                        os.rmdir(folder)
+                os.chmod(file_path, 0o777)  # Make the top-level folder writable
+                os.rmdir(file_path)  # Finally, remove the directory
+            else:
+                # It's a file, ensure it's writable and remove it
+                os.chmod(file_path, 0o777)  # Make it writable
+                os.remove(file_path)
+            print(f"Successfully removed: {file_path}")
+            return True
+        except PermissionError:
+            print(f"Permission error for {file_path}, retrying...")
+        except Exception as e:
+            print(f"Error removing {file_path}: {e}")
+        
+        time.sleep(delay)
+    return False
     
 def remove_read_only_attribute(path: Path):
     # Recursively remove read-only attribute from a folder and its contents
@@ -42,12 +83,12 @@ def get_user_data_directory():
         raise FileNotFoundError(f"No Chrome binary directory found under {version_directory}")
 
     # Define the user data directory path
-    user_data_directory = version_directory / chrome_binary_directory / "user-data"
+    user_data_directory = version_directory / chrome_binary_directory / "userData"
 
     # Create the directory if it doesn't exist
     user_data_directory.mkdir(parents=True, exist_ok=True)
 
-    # Remove "read-only" attribute from the user data directory and all its contents
+    # Remove "read-only" attribute
     remove_read_only_attribute(user_data_directory)
 
     return user_data_directory
@@ -104,7 +145,7 @@ def is_chrome_up_to_date(main_directory, current_version):
         "win64": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
         "mac-arm64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
         "mac-x64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
-        "linux64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for Linux
+        "linux64": ["chrome-headless-shell", "chrome"]  # Two possible filenames for Linux
     }
 
     platform_key = get_platform()
@@ -121,8 +162,41 @@ def is_chrome_up_to_date(main_directory, current_version):
 
     print(f"Chrome binary not found under {chrome_dir}.")
     return False
+    
+def is_chromedriver_up_to_date(main_directory, current_version):
+    chromedriver_dir = Path(main_directory) / "Chromedriver" / current_version
+    
+    if not chromedriver_dir.exists():
+        # Chromedriver directory for version not found. Chrome not downloaded or not up to date.
+        return False
+
+    # Check for the Chromedriver binary depending on the platform
+    platform_binary = {
+        "win32": ["chromedriver.exe"],  # Two possible filenames for Windows
+        "win64": ["chromedriver.exe"],  # Two possible filenames for Windows
+        "mac-arm64": ["chromedriver"],  # Two possible filenames for macOS
+        "mac-x64": ["chromedriver"],  # Two possible filenames for macOS
+        "linux64": ["chromedriver"],  # Two possible filenames for Linux
+    }
+
+    platform_key = get_platform()
+    binary_names = platform_binary.get(platform_key, ["chromedriver"])  # Default to chromedriver
+
+    # Handle the additional subfolder under version
+    for subfolder in chromedriver_dir.iterdir():
+        if subfolder.is_dir():
+            # Check both possible filenames
+            for binary_name in binary_names:
+                binary_path = subfolder / binary_name
+                if binary_path.exists():
+                    return True
+
+    print(f"Chromedriver binary not found under {chromedriver_dir}.")
+    return False
 
 def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=30, wait_interval=5):
+    temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
+    temp_zip_path = Path(temp_dir) / f"chrome-{version}.zip"
     zip_path = Path(main_directory) / f"chrome-{version}.zip"
     extract_path = Path(main_directory) / "Chrome" / version
 
@@ -138,29 +212,34 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
         expected_file_size = int(response.headers.get('Content-Length', 0))
         print(f" - Expected file size: {expected_file_size} bytes")
 
-        # Write the zip file to disk (wait until it's fully downloaded)
-        with open(zip_path, "wb") as file:
+        # Write the zip file to a temporary location
+        with open(temp_zip_path, "wb") as temp_file:
             for chunk in response.iter_content(chunk_size=8192):
-                file.write(chunk)
+                temp_file.write(chunk)
 
-        # Check if the actual downloaded file size matches the expected file size
-        actual_file_size = zip_path.stat().st_size
+        # Validate the downloaded file size
+        actual_file_size = temp_zip_path.stat().st_size
         print(f" - Downloaded file size: {actual_file_size} bytes")
 
-        # Retry if file sizes don't match
+        # Retry until file sizes match or timeout occurs
         time_waited = 0
         while expected_file_size and actual_file_size != expected_file_size and time_waited < max_wait_time:
             print(f" - File size mismatch. Waiting for {wait_interval} seconds before checking again...")
             time.sleep(wait_interval)
             time_waited += wait_interval
-            actual_file_size = zip_path.stat().st_size
+            actual_file_size = temp_zip_path.stat().st_size
             print(f" - Downloaded file size (after waiting): {actual_file_size} bytes")
 
         if expected_file_size and actual_file_size != expected_file_size:
             raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
 
-        # Add small delay to ensure the file is closed and ready for extraction
-        time.sleep(5)
+        # Move the temp file to the final location
+        temp_zip_path.rename(zip_path)
+        print(f" - Download complete. File moved to: {zip_path}")
+
+        # Verify the integrity of the ZIP file before extraction
+        if not zipfile.is_zipfile(zip_path):
+            raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
 
         # Extract the zip file
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -175,16 +254,97 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
         raise RuntimeError(f" - Failed to download or extract Chrome version {version}: {e}")
 
     finally:
-        # Ensure the zip file is deleted after extraction
-        time.sleep(5)  # Small delay to ensure all file handles are closed
+        # Cleanup the ZIP file
         try:
             if zip_path.exists():
                 zip_path.unlink()
                 print(f" - File {zip_path} deleted.")
 
-            # Find and delete other .zip files containing 'chrome' (case-insensitive) in the same directory
+            # Remove any stray .zip files in the directory
             for file in Path(main_directory).glob("*.zip"):
-                if "chrome" in file.name.lower():
+                if "chrome-" in file.name.lower():
+                    try:
+                        file.unlink()
+                        print(f" - Deleted file: {file}")
+                    except Exception as e:
+                        print(f" - Failed to delete file {file}: {e}")
+
+        except PermissionError:
+            print(f" - Permission denied when trying to delete {zip_path}. Ensure no other process is using it.")
+        except Exception as e:
+            print(f" - Unexpected error while deleting {zip_path}: {e}")
+
+    return extract_path
+    
+def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=30, wait_interval=5):
+    temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
+    temp_zip_path = Path(temp_dir) / f"chromedriver-{version}.zip"
+    zip_path = Path(main_directory) / f"chromedriver-{version}.zip"
+    extract_path = Path(main_directory) / "Chromedriver" / version
+
+    # Ensure the main directory exists
+    Path(main_directory).mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Download the zip file
+        response = EH.make_request_with_retries(download_url, stream=True)
+        response.raise_for_status()
+
+        # Get the expected file size from the response headers (if available)
+        expected_file_size = int(response.headers.get('Content-Length', 0))
+        print(f" - Expected file size: {expected_file_size} bytes")
+
+        # Write the zip file to a temporary location
+        with open(temp_zip_path, "wb") as temp_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
+
+        # Validate the downloaded file size
+        actual_file_size = temp_zip_path.stat().st_size
+        print(f" - Downloaded file size: {actual_file_size} bytes")
+
+        # Retry until file sizes match or timeout occurs
+        time_waited = 0
+        while expected_file_size and actual_file_size != expected_file_size and time_waited < max_wait_time:
+            print(f" - File size mismatch. Waiting for {wait_interval} seconds before checking again...")
+            time.sleep(wait_interval)
+            time_waited += wait_interval
+            actual_file_size = temp_zip_path.stat().st_size
+            print(f" - Downloaded file size (after waiting): {actual_file_size} bytes")
+
+        if expected_file_size and actual_file_size != expected_file_size:
+            raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
+
+        # Move the temp file to the final location
+        temp_zip_path.rename(zip_path)
+        print(f" - Download complete. File moved to: {zip_path}")
+
+        # Verify the integrity of the ZIP file before extraction
+        if not zipfile.is_zipfile(zip_path):
+            raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
+
+        # Extract the zip file
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(extract_path)
+
+        print(f" - Extraction complete to: {extract_path}")
+        
+        # Remove read-only attribute from the extracted folder
+        remove_read_only_attribute(extract_path)
+
+    except Exception as e:
+        raise RuntimeError(f" - Failed to download or extract Chromedriver version {version}: {e}")
+
+    finally:
+        # Cleanup the ZIP file
+        try:
+            if zip_path.exists():
+                zip_path.unlink()
+                print(f" - File {zip_path} deleted.")
+
+            # Remove any stray .zip files in the directory
+            for file in Path(main_directory).glob("*.zip"):
+                if "chromedriver-" in file.name.lower():
                     try:
                         file.unlink()
                         print(f" - Deleted file: {file}")
@@ -198,18 +358,42 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
 
     return extract_path
 
-def remove_old_versions(main_directory, latest_version):
+def remove_old_versions(main_directory, latest_version, browser_type):
     chrome_dir = Path(main_directory) / "Chrome"
+    chromedriver_dir = Path(main_directory) / "Chromedriver"
 
+    # Check for browser_type conditions
+    if browser_type == "chrome":
+        for version_dir in chrome_dir.iterdir():
+            if version_dir.is_dir():
+                for sub_dir in version_dir.iterdir():
+                    if sub_dir.is_dir():
+                        headless_shell_path = sub_dir / "chrome-headless-shell.exe" if os.name == "nt" else sub_dir / "chrome-headless-shell"
+                        if headless_shell_path.exists():
+                            print(f"chrome-headless-shell found in {headless_shell_path}. Removing entire contents of {chrome_dir}...")
+                            try_remove(version_dir)
+                            return  # Exit the function after removal
+    elif browser_type == "chrome-headless-shell":
+        for version_dir in chrome_dir.iterdir():
+            if version_dir.is_dir():
+                for sub_dir in version_dir.iterdir():
+                    if sub_dir.is_dir():
+                        chrome_path = sub_dir / "chrome.exe" if os.name == "nt" else sub_dir / "chrome"
+                        if chrome_path.exists():
+                            print(f"chrome found in {chrome_path}. Removing entire contents of {chrome_dir}...")
+                            try_remove(version_dir)
+                            return  # Exit the function after removal
+
+    # Remove old versions for "chrome" or "chrome-headless-shell"
     for version_dir in chrome_dir.iterdir():
         if version_dir.is_dir() and version_dir.name != latest_version:
             print(f"Removing old Chrome version: {version_dir.name}...")
-            
-            # Remove read-only attribute before deleting the directory
-            remove_read_only_attribute(version_dir)
-            
-            # Now safely remove the old version
-            shutil.rmtree(version_dir)
+            try_remove(version_dir)
+
+    for version_dir in chromedriver_dir.iterdir():
+        if version_dir.is_dir() and version_dir.name != latest_version:
+            print(f"Removing old Chromedriver version: {version_dir.name}...")
+            try_remove(version_dir)
 
 def get_chrome_binary_path(main_directory):
     version = get_latest_stable_version()
@@ -221,15 +405,15 @@ def get_chrome_binary_path(main_directory):
 
     # Define possible binary names for each platform
     platform_binary = {
-        "win32": ["chrome.exe", "chrome-headless-shell.exe"],  # Windows binaries
-        "win64": ["chrome.exe", "chrome-headless-shell.exe"],  # Windows binaries
-        "mac-arm64": ["chrome", "chrome-headless-shell"],      # macOS binaries
-        "mac-x64": ["chrome", "chrome-headless-shell"],        # macOS binaries
-        "linux64": ["chrome", "chrome-headless-shell"],        # Linux binaries
+        "win32": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
+        "win64": ["chrome-headless-shell.exe", "chrome.exe"],  # Two possible filenames for Windows
+        "mac-arm64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
+        "mac-x64": ["chrome-headless-shell", "chrome"],  # Two possible filenames for macOS
+        "linux64": ["chrome-headless-shell", "chrome"]  # Two possible filenames for Linux
     }
 
     platform_key = get_platform()
-    binary_names = platform_binary.get(platform_key, ["chrome", "chrome-headless-shell"])  # Default to both names
+    binary_names = platform_binary.get(platform_key, ["chrome-headless-shell", "chrome"])  # Default to both names
 
     # Look for the binary in the version directory
     for subfolder in chrome_dir.iterdir():
@@ -241,6 +425,36 @@ def get_chrome_binary_path(main_directory):
 
     raise FileNotFoundError(f"Chrome binary not found under {chrome_dir}.")
     
+def get_chromedriver_binary_path(main_directory):
+    version = get_latest_stable_version()
+
+    chromedriver_dir = Path(main_directory) / "Chromedriver" / version
+    
+    if not chromedriver_dir.exists():
+        raise FileNotFoundError(f"Chromedriver version {version} not found in {chromedriver_dir}")
+
+    # Define possible binary names for each platform
+    platform_binary = {
+        "win32": ["chromedriver.exe"],  # Windows binaries
+        "win64": ["chromedriver.exe"],  # Windows binaries
+        "mac-arm64": ["chromedriver"],      # macOS binaries
+        "mac-x64": ["chromedriver"],        # macOS binaries
+        "linux64": ["chromedriver"],        # Linux binaries
+    }
+
+    platform_key = get_platform()
+    binary_names = platform_binary.get(platform_key, ["chromedriver"])  # Default to chromedriver
+
+    # Look for the binary in the version directory
+    for subfolder in chromedriver_dir.iterdir():
+        if subfolder.is_dir():
+            for binary_name in binary_names:
+                binary_path = subfolder / binary_name
+                if binary_path.exists():  # Check if the binary file exists
+                    return str(binary_path)
+
+    raise FileNotFoundError(f"Chromedriver binary not found under {chromedriver_dir}.")
+    
 def create_chrome_directory(main_directory):
     chrome_dir = Path(main_directory) / "Chrome"
     
@@ -249,37 +463,73 @@ def create_chrome_directory(main_directory):
 
     return chrome_dir
     
-def delete_chromedriver_cache():
+def create_chromedriver_directory(main_directory):
+    chrome_dir = Path(main_directory) / "Chromedriver"
+    
+    if not chrome_dir.exists():
+        chrome_dir.mkdir(exist_ok=True)
+
+    return chrome_dir
+    
+def get_selenium_install_location():
     try:
-        # Get the path to the chromedriver cache directory
-        if platform.system() == "Windows":
-            # Use the 'USERPROFILE' environment variable to get the correct user folder on Windows
-            user_profile = os.environ.get('USERPROFILE', '')
-            chromedriver_cache = os.path.join(user_profile, '.cache', 'selenium', 'chromedriver')
-        else:
-            # On macOS/Linux, use the home directory
-            chromedriver_cache = os.path.expanduser('~/.cache/selenium/chromedriver')
-
-        # Check if the path exists
-        if os.path.exists(chromedriver_cache):
-            # Iterate through the folder and delete all files and subdirectories
-            for root, dirs, files in os.walk(chromedriver_cache, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    shutil.rmtree(os.path.join(root, name))
-            print(f"Selenium Chromedriver cache cleared at: {chromedriver_cache}")
-        else:
-            print(f"The path {chromedriver_cache} does not exist.")
-
+        # Use pip show to get Selenium installation details
+        result = subprocess.run([sys.executable, '-m', 'pip', 'show', 'selenium'], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        for line in result.stdout.splitlines():
+            if line.startswith("Location:"):
+                site_packages_directory = line.split("Location:")[1].strip()
+                selenium_directory = f"{site_packages_directory}\\selenium"
+                return selenium_directory
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print("Error finding Selenium install location using pip show:", e)
+        return None
+
+def clear_selenium_manager_cache():
+    try:
+        # Get the Selenium install location
+        selenium_install_location = get_selenium_install_location()
+        if not selenium_install_location:
+            print("Could not determine Selenium install location. Skipping cache clear.")
+            return
+
+        webdriver_common_path = os.path.join(selenium_install_location, "webdriver", "common")
+        
+        # Determine the OS and set the appropriate folder and file name
+        os_name = platform.system().lower()
+
+        if os_name == "windows":
+            selenium_manager_path = os.path.join(webdriver_common_path, "windows", "selenium-manager.exe")
+        elif os_name == "linux":
+            selenium_manager_path = os.path.join(webdriver_common_path, "linux", "selenium-manager")
+        elif os_name == "darwin":  # macOS
+            selenium_manager_path = os.path.join(webdriver_common_path, "macos", "selenium-manager")
+        else:
+            print("Unsupported operating system.")
+            return
+
+        # Ensure the Selenium Manager file exists
+        if not os.path.isfile(selenium_manager_path):
+            print(f"Selenium Manager file not found at: {selenium_manager_path}")
+            return
+
+        # Build the command
+        command = f"{selenium_manager_path} --clear-cache --browser chrome --driver chromedriver"
+
+        try:
+            # Run the command
+            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            print("Selenium Chromedriver cache cleared")
+        except subprocess.CalledProcessError as e:
+            print("Error running Selenium Manager command:", e.stderr)
+    except Exception as e:
+        print("An unexpected error occurred:", e)
 
 def checkChrome():
     main_directory = get_main_directory()
     
-    #browser_type = "chrome"
-    browser_type = "chrome-headless-shell"
+    browser_type = "chrome"
+    #browser_type = "chrome-headless-shell"
 
     # Get latest version details
     latest_version = get_latest_stable_version()
@@ -289,30 +539,48 @@ def checkChrome():
     # Create Chrome directory if it doesn't exist
     create_chrome_directory(main_directory)
     
+    # Create Chromedriver directory if it doesn't exist
+    create_chromedriver_directory(main_directory)
+    
     # Always remove old versions, even if the latest version is already downloaded
-    remove_old_versions(main_directory, latest_version)
+    remove_old_versions(main_directory, latest_version, browser_type)
 
-    # Check if the latest version is already downloaded
-    if is_chrome_up_to_date(main_directory, latest_version):
-        # Chrome is already up to date
-        # print(f"Chrome version {latest_version} is already up to date.")
+    # Check if the latest versions of Chrome and Chromedriver are already downloaded
+    if is_chrome_up_to_date(main_directory, latest_version) and is_chromedriver_up_to_date(main_directory, latest_version):
+        # Chrome and Chromedriver are already up to date
         return
 
-    # Get the download URL for the relevant platform
-    download_url = None
+    # Get the Chrome download URL for the relevant platform
+    chrome_download_url = None
 
     for entry in latest_version_data['downloads'][browser_type]:
         if entry['platform'] == platform_key:
-            download_url = entry['url']
+            chrome_download_url = entry['url']
             break
 
-    if not download_url:
+    if not chrome_download_url:
+        raise ValueError(f"No download available for platform {platform_key}")
+        
+    # Get the Chromedriver download URL for the relevant platform
+    chromedriver_download_url = None
+
+    for entry in latest_version_data['downloads']["chromedriver"]:
+        if entry['platform'] == platform_key:
+            chromedriver_download_url = entry['url']
+            break
+
+    if not chromedriver_download_url:
         raise ValueError(f"No download available for platform {platform_key}")
 
     # Download and extract the latest version of Chrome
     print(f"Downloading Chrome version {latest_version}...")
-    download_and_extract_chrome(download_url, main_directory, latest_version)
+    download_and_extract_chrome(chrome_download_url, main_directory, latest_version)
     print(f"Chrome version {latest_version} downloaded successfully.")
     
+    # Download and extract the latest version of Chromedriver
+    print(f"Downloading Chromedriver version {latest_version}...")
+    download_and_extract_chromedriver(chromedriver_download_url, main_directory, latest_version)
+    print(f"Chromedriver version {latest_version} downloaded successfully.")
+    
     # Clear the Chromedriver cache after downloading the new version of Chrome
-    delete_chromedriver_cache()
+    clear_selenium_manager_cache()
