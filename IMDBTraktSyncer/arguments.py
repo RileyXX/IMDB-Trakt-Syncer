@@ -4,7 +4,6 @@ import shutil
 import subprocess
 import os
 import platform
-import shlex
 
 def try_remove(file_path, retries=3, delay=1):
     """
@@ -17,32 +16,53 @@ def try_remove(file_path, retries=3, delay=1):
     """
     for attempt in range(retries):
         try:
-            # Check if the path is a directory
             if os.path.isdir(file_path):
                 # Ensure the directory and its contents are writable
                 for root, dirs, files in os.walk(file_path, topdown=False):
                     for name in files:
                         file = os.path.join(root, name)
-                        os.chmod(file, 0o777)  # Make file writable
+                        if sys.platform != 'win32':  # chmod on Linux/macOS
+                            os.chmod(file, 0o777)  # Make file writable
                         os.remove(file)
                     for name in dirs:
                         folder = os.path.join(root, name)
-                        os.chmod(folder, 0o777)  # Make folder writable
+                        if sys.platform != 'win32':  # chmod on Linux/macOS
+                            os.chmod(folder, 0o777)  # Make folder writable
                         os.rmdir(folder)
-                os.chmod(file_path, 0o777)  # Make the top-level folder writable
+
+                if sys.platform != 'win32':  # chmod on Linux/macOS
+                    os.chmod(file_path, 0o777)  # Make the top-level folder writable
                 os.rmdir(file_path)  # Finally, remove the directory
             else:
                 # It's a file, ensure it's writable and remove it
-                os.chmod(file_path, 0o777)  # Make it writable
+                if sys.platform != 'win32':  # chmod on Linux/macOS
+                    os.chmod(file_path, 0o777)  # Make it writable
                 os.remove(file_path)
+
             print(f"Successfully removed: {file_path}")
             return True
         except PermissionError:
             print(f"Permission error for {file_path}, retrying...")
         except Exception as e:
             print(f"Error removing {file_path}: {e}")
-        
+
         time.sleep(delay)
+
+    # If running on Windows, handle read-only files
+    if sys.platform == 'win32':
+        try:
+            # Remove read-only attribute on Windows
+            if os.path.exists(file_path):
+                os.chmod(file_path, stat.S_IWRITE)  # Remove read-only attribute
+                if os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Remove non-empty directory
+                else:
+                    os.remove(file_path)
+            print(f"Successfully removed (after read-only fix): {file_path}")
+            return True
+        except Exception as e:
+            print(f"Error removing {file_path} on Windows: {e}")
+
     return False
 
 def get_selenium_install_location():
@@ -52,7 +72,9 @@ def get_selenium_install_location():
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         for line in result.stdout.splitlines():
             if line.startswith("Location:"):
-                return line.split("Location:")[1].strip()
+                site_packages_directory = line.split("Location:")[1].strip()
+                selenium_directory = os.path.join(site_packages_directory, 'selenium')
+                return selenium_directory
     except Exception as e:
         print("Error finding Selenium install location using pip show:", e)
         return None
@@ -66,7 +88,7 @@ def clear_selenium_manager_cache():
             return
 
         webdriver_common_path = os.path.join(selenium_install_location, "webdriver", "common")
-
+        
         # Determine the OS and set the appropriate folder and file name
         os_name = platform.system().lower()
 
@@ -90,8 +112,8 @@ def clear_selenium_manager_cache():
 
         try:
             # Run the command
-            result = subprocess.run(shlex.split(command), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-            print("Command output:", result.stdout)
+            result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            print("Selenium Chromedriver cache cleared")
         except subprocess.CalledProcessError as e:
             print("Error running Selenium Manager command:", e.stderr)
     except Exception as e:
