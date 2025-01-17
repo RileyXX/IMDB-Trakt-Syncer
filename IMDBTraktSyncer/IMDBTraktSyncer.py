@@ -93,7 +93,7 @@ def main():
             options = Options()
             options.binary_location = chrome_binary_path
             options.add_argument(f"--user-data-dir={user_data_directory}")
-            #options.add_argument("--headless=new")
+            options.add_argument("--headless=new")
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
