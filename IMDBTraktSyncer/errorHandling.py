@@ -159,11 +159,18 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
     for retry in range(max_retries):
         try:
             start_time = time.time()  # Track time taken for each retry attempt
-
-            # Temporary solution to Chromium bug: Restart tab logic
+            
+            # Temporary solution to Chromium bug: Restart tab logic. See: https://issues.chromium.org/issues/386887881
+            # Open a new tab and close any extras from previous iterations
             driver.execute_script("window.open();")
-            driver.close()
-            driver.switch_to.window(driver.window_handles[0])
+            new_tab = driver.window_handles[-1]
+            driver.switch_to.window(new_tab)
+
+            # Close all other tabs except the current new tab
+            for handle in driver.window_handles[:-1]:
+                driver.switch_to.window(handle)
+                driver.close()
+            driver.switch_to.window(new_tab)
 
             # Attempt to load the page using Selenium driver
             driver.get(url)
@@ -186,7 +193,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting.")
-                    return False, None, url
+                    return False, None, url, driver
 
                 print(f"   - Remaining time for retries: {int(total_wait_time - total_time_spent)} seconds.")
                 time.sleep(wait_time)
@@ -197,7 +204,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 # Page loaded successfully
-                return True, status_code, url
+                return True, status_code, url, driver
 
         except TimeoutException as e:
             frame = inspect.currentframe()
@@ -210,7 +217,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             if total_time_spent >= total_wait_time:
                 print("   - Total wait time exceeded. Aborting after timeout.")
-                return False, None, url
+                return False, None, url, driver
 
             print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {int(total_wait_time - total_time_spent)}s")
             time.sleep(wait_time)
@@ -242,7 +249,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting after WebDriver error.")
-                    return False, None, url
+                    return False, None, url, driver
 
                 print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
                 time.sleep(wait_time)
@@ -250,7 +257,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 print("   - Non-retryable WebDriver error encountered. Aborting.")
-                return False, None, url
+                return False, None, url, driver
 
         except PageLoadException as e:
             frame = inspect.currentframe()
@@ -266,7 +273,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting after page load exception.")
-                    return False, None, url
+                    return False, None, url, driver
 
                 print(f"   - Retryable error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
                 time.sleep(wait_time)
@@ -274,10 +281,10 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 print("   - Non-retryable error encountered. Aborting.")
-                return False, None, url
+                return False, None, url, driver
 
     print("   - All retries failed. Unable to load page.")
-    return False, None, url
+    return False, None, url, driver
     
 def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):
     """

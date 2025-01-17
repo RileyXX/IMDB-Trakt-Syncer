@@ -93,7 +93,7 @@ def main():
             options = Options()
             options.binary_location = chrome_binary_path
             options.add_argument(f"--user-data-dir={user_data_directory}")
-            options.add_argument("--headless=new")
+            #options.add_argument("--headless=new")
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
@@ -135,7 +135,7 @@ def main():
             wait = WebDriverWait(driver, 10)
             
             # go to IMDB homepage
-            success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+            success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
             if not success:
                 # Page failed to load, raise an exception
                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -151,7 +151,7 @@ def main():
                 time.sleep(2)
                 
                 # Load sign in page
-                success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
+                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -172,7 +172,7 @@ def main():
                 time.sleep(2)
 
                 # go to IMDB homepage
-                success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -370,7 +370,7 @@ def main():
                             print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
-                            success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -504,7 +504,7 @@ def main():
                         
                         try:
                             # Load page
-                            success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -633,7 +633,7 @@ def main():
                                     print(f" - Submitting review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
-                                    success, status_code, url = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
+                                    success, status_code, url, driver = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
                                     if not success:
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -749,7 +749,7 @@ def main():
                             print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
-                            success, status_code, url = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -809,7 +809,7 @@ def main():
             if (original_language != "English (United States)"):
                 print("Changing IMDB Language Back to Original")
                 # go to IMDB homepage
-                success, status_code, url = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
