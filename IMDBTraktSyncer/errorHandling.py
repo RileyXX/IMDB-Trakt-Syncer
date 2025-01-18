@@ -184,6 +184,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             status_code = driver.execute_script(
                 "return window.performance.getEntries()[0].responseStatus;"
             )
+            
+            # Update resolved_url with the current URL after potential redirects
+            resolved_url = driver.current_url
 
             # Handle status codes
             if status_code is None or status_code == 0:
@@ -193,7 +196,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting.")
-                    return False, None, url, driver
+                    return False, None, url, driver, wait
 
                 print(f"   - Remaining time for retries: {int(total_wait_time - total_time_spent)} seconds.")
                 time.sleep(wait_time)
@@ -204,7 +207,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 # Page loaded successfully
-                return True, status_code, url, driver
+                return True, status_code, resolved_url, driver, wait
 
         except TimeoutException as e:
             frame = inspect.currentframe()
@@ -217,7 +220,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             if total_time_spent >= total_wait_time:
                 print("   - Total wait time exceeded. Aborting after timeout.")
-                return False, None, url, driver
+                return False, None, url, driver, wait
 
             print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {int(total_wait_time - total_time_spent)}s")
             time.sleep(wait_time)
@@ -249,7 +252,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting after WebDriver error.")
-                    return False, None, url, driver
+                    return False, None, url, driver, wait
 
                 print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
                 time.sleep(wait_time)
@@ -257,7 +260,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 print("   - Non-retryable WebDriver error encountered. Aborting.")
-                return False, None, url, driver
+                return False, None, url, driver, wait
 
         except PageLoadException as e:
             frame = inspect.currentframe()
@@ -273,7 +276,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
                 if total_time_spent >= total_wait_time:
                     print("   - Total wait time exceeded. Aborting after page load exception.")
-                    return False, None, url, driver
+                    return False, None, url, driver, wait
 
                 print(f"   - Retryable error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
                 time.sleep(wait_time)
@@ -281,10 +284,10 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             else:
                 print("   - Non-retryable error encountered. Aborting.")
-                return False, None, url, driver
+                return False, None, url, driver, wait
 
     print("   - All retries failed. Unable to load page.")
-    return False, None, url, driver
+    return False, None, url, driver, wait
     
 def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):
     """
@@ -348,3 +351,111 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
     # If retries are exhausted, log the failure
     print(f"Max retries reached. Request to {url} failed.")
     return None
+    
+# Function to resolve IMDB_ID redirection using the driver
+def resolve_imdb_id_with_driver(imdb_id, driver, wait):
+    try:
+        # Construct the IMDB URL
+        url = f"https://www.imdb.com/title/{imdb_id}/"
+        
+        # Load URL
+        success, status_code, resolved_url, driver, wait = get_page_with_retries(url, driver, wait)
+        if not success:
+            raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {resolved_url}")
+        
+        # Extract the redirected IMDB_ID from the resolved URL
+        final_imdb_id = resolved_url.split("/title/")[1].split("/")[0]
+        return final_imdb_id, driver, wait
+
+    except Exception as e:
+        print(f"Error resolving IMDB_ID {imdb_id}: {e}")
+        return imdb_id, driver, wait  # Return the original ID if an error occurs
+    
+# Function to resolve and update outdated IMDB_IDs from the trakt list based on matching Title and Type comparison
+def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
+    comparison_keys = ['Title', 'Type', 'IMDB_ID']  # Only compare Title and Type
+
+    # Group items by (Title, Type)
+    trakt_grouped = {}
+    for item in trakt_list:
+        if all(key in item for key in comparison_keys):
+            key = (item['Title'], item['Type'])
+            trakt_grouped.setdefault(key, set()).add(item['IMDB_ID'])
+
+    imdb_grouped = {}
+    for item in imdb_list:
+        if all(key in item for key in comparison_keys):
+            key = (item['Title'], item['Type'])
+            imdb_grouped.setdefault(key, set()).add(item['IMDB_ID'])
+
+    # Find conflicting items based on Title and Type where IMDB_IDs are different
+    conflicting_items = {
+        key for key in trakt_grouped.keys() & imdb_grouped.keys()
+        if trakt_grouped[key] != imdb_grouped[key]
+    }
+
+    # print(f"Initial Conflicting Items: {conflicting_items}")
+
+    # Resolve conflicts by checking IMDB_ID redirection using the driver
+    for key in conflicting_items:
+        trakt_ids = trakt_grouped[key]
+        imdb_ids = imdb_grouped[key]
+
+        # Resolve IMDB_IDs using the driver only for trakt_list
+        resolved_trakt_ids = set()
+        for trakt_id in trakt_ids:
+            resolved_id, driver, wait = resolve_imdb_id_with_driver(trakt_id, driver, wait)
+            resolved_trakt_ids.add(resolved_id)
+
+            # Directly update IMDB_ID in the original trakt_list
+            for item in trakt_list:
+                if item['IMDB_ID'] == trakt_id:
+                    item['IMDB_ID'] = resolved_id
+
+        # Skip resolving IMDB_IDs in imdb_list as they're already current
+        resolved_imdb_ids = imdb_ids
+
+        '''
+        # If resolved trakt IDs match imdb IDs, the conflict is considered resolved
+        if resolved_trakt_ids == resolved_imdb_ids:
+            print(f"Resolved conflict for: {key}")
+        else:
+            print(f"Conflict not resolved for: {key}")
+        '''
+
+    return trakt_list, imdb_list, driver, wait
+    
+# Function to filter out items that share the same Title, Year, and Type
+# AND have non-matching TMDB_ID values
+def filter_out_mismatched_items(trakt_list, tmdb_list):
+    # Define the keys to be used for comparison
+    comparison_keys = ['Title', 'Year', 'Type', 'TMDB_ID']
+
+    # Group items by (Title, Year, Type)
+    trakt_grouped = {}
+    for item in trakt_list:
+        if all(key in item for key in comparison_keys):
+            key = (item['Title'], item['Year'], item['Type'])
+            trakt_grouped.setdefault(key, set()).add(item['TMDB_ID'])
+
+    tmdb_grouped = {}
+    for item in tmdb_list:
+        if all(key in item for key in comparison_keys):
+            key = (item['Title'], item['Year'], item['Type'])
+            tmdb_grouped.setdefault(key, set()).add(item['TMDB_ID'])
+
+    # Find conflicting items (same Title, Year, Type but different TMDB_IDs)
+    conflicting_items = {
+        key for key in trakt_grouped.keys() & tmdb_grouped.keys()  # Only consider shared keys
+        if trakt_grouped[key] != tmdb_grouped[key]  # Check if TMDB_IDs differ
+    }
+    
+    # Filter out conflicting items from both lists
+    filtered_trakt_list = [
+        item for item in trakt_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
+    ]
+    filtered_tmdb_list = [
+        item for item in tmdb_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
+    ]
+
+    return filtered_trakt_list, filtered_tmdb_list
