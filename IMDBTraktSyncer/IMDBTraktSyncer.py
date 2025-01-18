@@ -78,6 +78,7 @@ def main():
             
             # Check if Chrome portable browser is downloaded and up to date
             CC.checkChrome()
+            browser_type, headless = CC.get_browser_type()
 
             # Set up directory for downloads
             directory = os.path.dirname(os.path.realpath(__file__))
@@ -93,7 +94,8 @@ def main():
             options = Options()
             options.binary_location = chrome_binary_path
             options.add_argument(f"--user-data-dir={user_data_directory}")
-            options.add_argument("--headless=new")
+            if headless == True:
+                options.add_argument("--headless=new")
             options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
@@ -111,14 +113,15 @@ def main():
             options.add_argument("--disable-extensions")
             options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
             options.add_argument('--log-level=3')
-                
-            service = Service(executable_path=chromedriver_binary_path)
             
+            service = Service(executable_path=chromedriver_binary_path)
+                        
             # Temporary solution for removing "DevTools listening on ws:" line on Windows for better readability
             # Only use CREATE_NO_WINDOW on Windows systems (32-bit or 64-bit)
-            if sys.platform == "win32":
-                creation_flags = subprocess.CREATE_NO_WINDOW
-                service.creation_flags = creation_flags
+            if browser_type == "chrome":
+                if sys.platform == "win32":
+                    creation_flags = subprocess.CREATE_NO_WINDOW
+                    service.creation_flags = creation_flags
 
             try:
                 # Initialize WebDriver with the given options and service
@@ -135,7 +138,7 @@ def main():
             wait = WebDriverWait(driver, 10)
             
             # go to IMDB homepage
-            success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+            success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
             if not success:
                 # Page failed to load, raise an exception
                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -151,7 +154,7 @@ def main():
                 time.sleep(2)
                 
                 # Load sign in page
-                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
+                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -172,7 +175,7 @@ def main():
                 time.sleep(2)
 
                 # go to IMDB homepage
-                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -230,6 +233,16 @@ def main():
             trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
             imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
             
+            # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
+            trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
+            trakt_reviews, imdb_reviews, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_reviews, imdb_reviews, driver, wait)
+            trakt_watchlist, imdb_watchlist, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_watchlist, imdb_watchlist, driver, wait)
+            
+            # Filter out items that share the same Title, Year and Type, AND have non-matching IMDB_ID values
+            trakt_ratings, imdb_ratings = EH.filter_out_mismatched_items(trakt_ratings, imdb_ratings)
+            trakt_reviews, imdb_reviews = EH.filter_out_mismatched_items(trakt_reviews, imdb_reviews)
+            trakt_watchlist, imdb_watchlist = EH.filter_out_mismatched_items(trakt_watchlist, imdb_watchlist)
+                                  
             # Get trakt and imdb data and filter out items with missing imdb id
             trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
             imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
@@ -370,7 +383,7 @@ def main():
                             print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
-                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -504,7 +517,7 @@ def main():
                         
                         try:
                             # Load page
-                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -633,7 +646,7 @@ def main():
                                     print(f" - Submitting review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
-                                    success, status_code, url, driver = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
+                                    success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
                                     if not success:
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -749,7 +762,7 @@ def main():
                             print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
-                            success, status_code, url, driver = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
                             if not success:
                                 # Page failed to load, raise an exception
                                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -809,7 +822,7 @@ def main():
             if (original_language != "English (United States)"):
                 print("Changing IMDB Language Back to Original")
                 # go to IMDB homepage
-                success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
+                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")

@@ -27,7 +27,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     
     
     # Generate watchlist export
-    success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/list/watchlist', driver, wait)
+    success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/list/watchlist', driver, wait)
     if not success:
         # Page failed to load, raise an exception
         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -37,7 +37,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     time.sleep(3)
     
     # Generate ratings export
-    success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/list/ratings', driver, wait)
+    success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/list/ratings', driver, wait)
     if not success:
         # Page failed to load, raise an exception
         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -59,7 +59,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
 
     while time.time() - start_time < max_wait_time:
         # Wait for export processing to finish
-        success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
+        success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -80,7 +80,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     #Get IMDB Watchlist Items
     try:
         # Load page
-        success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
+        success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -142,6 +142,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 for row in reader:
                     title = row[header_index['Title']]
                     year = row[header_index['Year']]
+                    year = int(year) if year else None
                     imdb_id = row[header_index['Const']]
                     date_added = row[header_index['Created']]
                     media_type = row[header_index['Title Type']]
@@ -182,7 +183,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     # Get IMDB Ratings
     try:
         # Load page
-        success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
+        success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -244,6 +245,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                 for row in reader:
                         title = row[header_index['Title']]
                         year = row[header_index['Year']]
+                        year = int(year) if year else None
                         rating = row[header_index['Your Rating']]
                         imdb_id = row[header_index['Const']]
                         date_added = row[header_index['Date Rated']]
@@ -299,7 +301,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
     #Get IMDB Reviews
     
     # Load page
-    success, status_code, url, driver = EH.get_page_with_retries('https://www.imdb.com/profile', driver, wait)
+    success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/profile', driver, wait)
     if not success:
         # Page failed to load, raise an exception
         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -314,7 +316,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
         reviews_url = driver.current_url + "reviews/"
         
         # Load page
-        success, status_code, url, driver = EH.get_page_with_retries(reviews_url, driver, wait)
+        success, status_code, url, driver, wait = EH.get_page_with_retries(reviews_url, driver, wait)
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
@@ -334,6 +336,7 @@ def getImdbData(imdb_username, imdb_password, driver, directory, wait):
                     # Extract review details
                     review['Title'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").text
                     review['Year'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header span").text.strip('()').split('–')[0].strip()
+                    review['Year'] = int(year) if year else None
                     review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
                     review['IMDBReviewID'] = element.get_attribute("data-review-id")
                     review['Comment'] = element.find_element(By.CSS_SELECTOR, ".content > .text").text.strip()

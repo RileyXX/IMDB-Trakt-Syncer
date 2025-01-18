@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import os
 import platform
+import stat
 
 def try_remove(file_path, retries=3, delay=1):
     """
@@ -121,26 +122,31 @@ def clear_selenium_manager_cache():
 
 def clear_user_data(main_directory):
     """
-    Deletes the credentials.txt file in the given directory.
-    
-    :param main_directory: Directory path where credentials.txt should be deleted.
+    Deletes the credentials.txt file and Chrome user data directories under the given main directory.
+
+    :param main_directory: Directory path where credentials.txt and user data should be deleted.
     """
     credentials_path = os.path.join(main_directory, "credentials.txt")
-    
-    # Check if the credentials.txt file exists
-    if not os.path.exists(credentials_path):
-        print(f"Error: {credentials_path} does not exist.")
-        return
-    
-    try:
+
+    if os.path.exists(credentials_path):
         # Remove the credentials.txt file
-        os.remove(credentials_path)
-        print(f"Removed {credentials_path}")
-    except PermissionError as e:
-        print(f"Permission error removing {credentials_path}: {e}")
-    except Exception as e:
-        print(f"Error removing {credentials_path}: {e}")
+        try_remove(credentials_path)
+
+    # Construct the Chrome user data directory path dynamically
+    chrome_directory = os.path.join(main_directory, "Chrome")
+    user_data_found = False
     
+    if os.path.exists(chrome_directory):
+        for root, dirs, files in os.walk(chrome_directory):
+            for dir_name in dirs:
+                if dir_name == "userData":
+                    user_data_directory = os.path.join(root, dir_name)
+                    user_data_found = True
+                    break
+        
+    if user_data_found:
+        try_remove(user_data_directory)
+
     print("Clear user data complete.")
 
 def clear_cache(main_directory):

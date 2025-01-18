@@ -15,7 +15,7 @@ def get_installed_version():
             if line.startswith("Version:"):
                 return line.split()[1]
     except subprocess.CalledProcessError as e:
-        print(f"Error: Could not retrieve python version using '{sys.executable} -m pip': {e}")
+        print(f"Error: Could not retrieve IMDBTraktSyncer version using '{sys.executable} -m pip': {e}")
     except FileNotFoundError:
         print(f"Error: Python executable '{sys.executable}' does not have pip installed.")
 

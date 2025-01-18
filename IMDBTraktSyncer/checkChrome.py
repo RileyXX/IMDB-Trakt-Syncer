@@ -14,11 +14,21 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
-from IMDBTraktSyncer import errorLogger as EL
 
 def get_main_directory():
     directory = os.path.dirname(os.path.realpath(__file__))
     return directory
+    
+def get_browser_type():
+    # Change browser type
+    # Valid options: "chrome" or "chrome-headless-shell"
+    browser_type = "chrome"
+    
+    # Run headless setting
+    # Valid options: True or False
+    headless = True
+    
+    return browser_type, headless
 
 def try_remove(file_path, retries=3, delay=1):
     """
@@ -257,7 +267,7 @@ def is_chromedriver_up_to_date(main_directory, current_version):
     print(f"Chromedriver binary not found under {chromedriver_dir}.")
     return False
 
-def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=30, wait_interval=5):
+def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=5):
     temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
     temp_zip_path = Path(temp_dir) / f"chrome-{version}.zip"
     zip_path = Path(main_directory) / f"chrome-{version}.zip"
@@ -339,7 +349,7 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
 
     return extract_path
     
-def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=30, wait_interval=5):
+def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=300, wait_interval=5):
     temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
     temp_zip_path = Path(temp_dir) / f"chromedriver-{version}.zip"
     zip_path = Path(main_directory) / f"chromedriver-{version}.zip"
@@ -631,8 +641,7 @@ def clear_selenium_manager_cache():
 def checkChrome():
     main_directory = get_main_directory()
     
-    browser_type = "chrome"
-    #browser_type = "chrome-headless-shell"
+    browser_type, _ = get_browser_type()
 
     # Get latest version details
     latest_version = get_latest_stable_version()
