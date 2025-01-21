@@ -283,11 +283,14 @@ def main():
             if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
                 imdb_watch_history, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
             print('Processing IMDB Data Complete')
+                        
+            if sync_watchlist_value or remove_watched_from_watchlists_value:
+                # Check if IMDB watch history has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
+                imdb_watchlist_limit_reached = EH.check_and_update_watch_history(imdb_watch_history)
             
             # Remove duplicates from Trakt watch_history
-            if sync_watchlist_value or remove_watched_from_watchlists_value:
-                trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
-            
+            trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
+                       
             # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
             trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
             trakt_reviews, imdb_reviews, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_reviews, imdb_reviews, driver, wait)
@@ -309,7 +312,7 @@ def main():
             imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
             trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
             imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
-                      
+            
             # Filter out items already set
             imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['IMDB_ID'] not in [imdb_rating['IMDB_ID'] for imdb_rating in imdb_ratings]]
             trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['IMDB_ID'] not in [trakt_rating['IMDB_ID'] for trakt_rating in trakt_ratings]]
@@ -403,6 +406,24 @@ def main():
                 # Find items to remove from imdb_watchlist
                 imdb_watchlist_items_to_remove = [item for item in imdb_watchlist if item['IMDB_ID'] in watched_content_ids]
             
+            # Sort lists by date
+            imdb_ratings_to_set = EH.sort_by_date_added(imdb_ratings_to_set)
+            trakt_ratings_to_set = EH.sort_by_date_added(trakt_ratings_to_set)
+            imdb_watchlist_to_set = EH.sort_by_date_added(imdb_watchlist_to_set)
+            trakt_watchlist_to_set = EH.sort_by_date_added(trakt_watchlist_to_set)
+            imdb_watch_history_to_set = EH.sort_by_date_added(imdb_watch_history_to_set)
+            trakt_watch_history_to_set = EH.sort_by_date_added(trakt_watch_history_to_set)
+            trakt_watchlist_items_to_remove = EH.sort_by_date_added(trakt_watchlist_items_to_remove)
+            imdb_watchlist_items_to_remove = EH.sort_by_date_added(imdb_watchlist_items_to_remove)
+            
+            if sync_watchlist_value or remove_watched_from_watchlists_value:
+                if imdb_watchlist_limit_reached:
+                    # IMDB watchlist limit reached, skip watchlist actions
+                    trakt_watchlist_to_set = []
+                    imdb_watchlist_to_set = []
+                    trakt_watchlist_items_to_remove = []
+                    imdb_watchlist_items_to_remove = []
+                        
             # If sync_watchlist_value is true
             if sync_watchlist_value:
                 # Set Trakt Watchlist Items
@@ -995,8 +1016,9 @@ def main():
                     for item in imdb_watch_history_to_set:
                         try:
                             item_count += 1
-                            year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                            print(f" - Adding {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})")
+
+                            year_str = f' ({item.get("Year")})' if item.get("Year") is not None else ''  # Handles None safely
+                            print(f" - Adding {item.get('Type')} ({item_count} of {num_items}): {item.get('Title')}{year_str} to IMDB Watch History ({item.get('IMDB_ID')})")
                             
                             # Load page
                             success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
