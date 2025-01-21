@@ -4,6 +4,8 @@ from requests.exceptions import ConnectionError, RequestException, Timeout, TooM
 import time
 import os
 import inspect
+import json
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -487,3 +489,69 @@ def filter_by_comment_length(lst, min_comment_length=None):
         if min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length):
             result.append(item)
     return result
+    
+
+def sort_by_date_added(items, descending=False):
+    """
+    Sorts a list of items by the 'Date_Added' field.
+
+    Args:
+        items (list): A list of dictionaries or objects with a 'Date_Added' field.
+        descending (bool): Whether to sort in descending order. Defaults to False (ascending).
+
+    Returns:
+        list: A sorted list of items by the 'Date_Added' field.
+    """
+    def parse_date(item):
+        date_str = item.get('Date_Added')  # Safely get the Date_Added field
+        if date_str:
+            try:
+                return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            except ValueError:
+                pass  # Invalid date format
+        return datetime.min  # Use the earliest date as a fallback
+
+    return sorted(items, key=parse_date, reverse=descending)
+    
+def check_and_update_watch_history(list):
+    """
+    Checks if the list has 10,000 or more items.
+    If true, updates the sync_watch_history in credentials.txt to False
+    and marks the watch history limit as reached.
+    
+    Args:
+        list (list): List of the user's watch history.
+    
+    Returns:
+        bool: True if the watch history limit has been reached, False otherwise.
+    """
+    # Define the file path for credentials.txt
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+    
+    # Load the credentials file
+    credentials = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        print("Credentials file not found. A new file will be created if needed.", exc_info=True)
+        return False  # Return False if the file doesn't exist
+
+    # Check if list has 10,000 or more items
+    if len(list) >= 9999:
+        # Update sync_watch_history to False
+        credentials['sync_watch_history'] = False
+        
+        # Mark that the watch history limit has been reached
+        try:
+            with open(file_path, 'w', encoding='utf-8') as file:
+                json.dump(credentials, file, indent=4, separators=(', ', ': '))
+            print("IMDB watch history has reached the 10,000 item limit. sync_watch_history value set to False. Watch history will no longer be synced.")
+            return True  # Return True indicating limit reached and updated the credentials
+        except Exception as e:
+            print("Failed to write to credentials file.", exc_info=True)
+            return False  # Return False if there was an error while updating the file
+
+    # Return False if the limit hasn't been reached
+    return False

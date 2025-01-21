@@ -357,6 +357,7 @@ def get_imdb_checkins(driver, wait, directory):
                         'Title': title,
                         'Year': year,
                         'IMDB_ID': imdb_id,
+                        'Date_Added': date_added,
                         'WatchedAt': date_added,
                         'Type': media_type
                     })

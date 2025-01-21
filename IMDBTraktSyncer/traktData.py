@@ -165,7 +165,7 @@ def get_trakt_watch_history(encoded_username):
                 imdb_movie_id = movie.get('ids', {}).get('imdb')
                 trakt_movie_id = movie.get('ids', {}).get('trakt')
                 if trakt_movie_id and trakt_movie_id not in seen_ids:
-                    watched_movies.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'WatchedAt': movie.get('watched_at'), 'Type': 'movie'})
+                    watched_movies.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Date_Added': item.get('watched_at'), 'WatchedAt': item.get('watched_at'), 'Type': 'movie'})
                     seen_ids.add(trakt_movie_id)
             elif item['type'] == 'episode':
                 show = item.get('show')
@@ -175,20 +175,22 @@ def get_trakt_watch_history(encoded_username):
                 aired_episodes = show.get('aired_episodes')
                 
                 if trakt_show_id and trakt_show_id not in seen_ids:
-                    watched_shows.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'ShowStatus': show_status, 'AiredEpisodes': aired_episodes, 'Type': 'show'})
+                    watched_shows.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'Date_Added': item.get('watched_at'), 'WatchedAt': item.get('watched_at'), 'ShowStatus': show_status, 'AiredEpisodes': aired_episodes, 'Type': 'show'})
                     seen_ids.add(trakt_show_id)
 
                 show_title = show.get('title')
                 episode = item.get('episode')
                 season_number = episode.get('season')
                 episode_number = episode.get('number')
+                season_number = str(season_number).zfill(2) if season_number else '00'
+                episode_number = str(episode_number).zfill(2) if episode_number else '00'
                 imdb_episode_id = episode.get('ids', {}).get('imdb')
                 trakt_episode_id = episode.get('ids', {}).get('trakt')
-                episode_title = f'{show_title}: {episode.get("title")}'
+                episode_title = f'{show_title}: [S{season_number}E{episode_number}] {episode.get("title")}'
                 episode_year = datetime.datetime.strptime(episode.get('first_aired'), "%Y-%m-%dT%H:%M:%S.%fZ").year if episode.get('first_aired') else None
-                watched_at = episode.get('watched_at')
+                watched_at = item.get('watched_at')
                 if trakt_episode_id and trakt_episode_id not in seen_ids:
-                    watched_episodes.append({'Title': episode_title, 'Year': episode_year, 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'TraktShowID': trakt_show_id, 'SeasonNumber': season_number, 'EpisodeNumber': episode_number, 'WatchedAt': watched_at, 'Type': 'episode'})
+                    watched_episodes.append({'Title': episode_title, 'Year': episode_year, 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'TraktShowID': trakt_show_id, 'SeasonNumber': season_number, 'EpisodeNumber': episode_number, 'Date_Added': watched_at, 'WatchedAt': watched_at, 'Type': 'episode'})
                     seen_ids.add(trakt_episode_id)
 
     # Filter watched_shows for completed shows where 80% or more of the show has been watched AND where the show's status is "ended" or "cancelled"
