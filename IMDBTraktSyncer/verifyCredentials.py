@@ -189,6 +189,100 @@ def prompt_sync_watchlist():
         raise
 
     return sync_watchlist_value
+    
+def prompt_sync_watch_history():
+    """
+    Prompts the user to sync their watch history
+    if not already configured in credentials.txt. Reads and writes to the
+    credentials file only when necessary.
+    """
+    # Define the file path
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+
+    # Load credentials file if it exists
+    credentials = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        logging.error("Credentials file not found. A new file will be created if needed.", exc_info=True)
+
+    # Check existing sync_watch_history value
+    sync_watch_history_value = credentials.get('sync_watch_history')
+    if sync_watch_history_value not in [None, "empty"]:
+        return sync_watch_history_value
+
+    # Prompt the user for input until valid
+    while True:
+        print("Trakt watch history is synced using IMDB Check-ins.")
+        print("See FAQ: https://help.imdb.com/article/imdb/track-movies-tv/check-ins-faq/GG59ELYW45FMC7J3")
+        user_input = input("Do you want to sync your watch history? (y/n): ").strip().lower()
+        if user_input == 'y':
+            sync_watch_history_value = True
+            break
+        elif user_input == 'n':
+            sync_watch_history_value = False
+            break
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+    # Update and save the credentials only if the file will change
+    credentials['sync_watch_history'] = sync_watch_history_value
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            json.dump(credentials, file, indent=4, separators=(', ', ': '))
+    except Exception as e:
+        logging.error("Failed to write to credentials file.", exc_info=True)
+        raise
+
+    return sync_watch_history_value
+    
+def prompt_mark_rated_as_watched():
+    """
+    Prompts the user to mark rated movies, shows, and episodes as watched
+    if not already configured in credentials.txt. Reads and writes to the
+    credentials file only when necessary.
+    """
+    # Define the file path
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+
+    # Load credentials file if it exists
+    credentials = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        logging.error("Credentials file not found. A new file will be created if needed.", exc_info=True)
+
+    # Check existing mark_rated_as_watched value
+    mark_rated_as_watched_value = credentials.get('mark_rated_as_watched')
+    if mark_rated_as_watched_value not in [None, "empty"]:
+        return mark_rated_as_watched_value
+
+    # Prompt the user for input until valid
+    while True:
+        user_input = input("Do you want to mark rated movies and episodes as watched? (y/n): ").strip().lower()
+        if user_input == 'y':
+            mark_rated_as_watched_value = True
+            break
+        elif user_input == 'n':
+            mark_rated_as_watched_value = False
+            break
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+    # Update and save the credentials only if the file will change
+    credentials['mark_rated_as_watched'] = mark_rated_as_watched_value
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            json.dump(credentials, file, indent=4, separators=(', ', ': '))
+    except Exception as e:
+        logging.error("Failed to write to credentials file.", exc_info=True)
+        raise
+
+    return mark_rated_as_watched_value
 
 def check_imdb_reviews_last_submitted():
     """

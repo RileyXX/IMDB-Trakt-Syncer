@@ -10,15 +10,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
 from IMDBTraktSyncer import errorLogger as EL
 
-def getTraktData():
+def get_trakt_encoded_username():
     # Process Trakt Ratings and Comments
-    print('Processing Trakt Data')
-
     response = EH.make_trakt_request('https://api.trakt.tv/users/me')
     json_data = json.loads(response.text)
     username_slug = json_data['ids']['slug']
     encoded_username = urllib.parse.quote(username_slug)
+    return encoded_username
     
+def get_trakt_watchlist(encoded_username):
     # Get Trakt Watchlist Items
     response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/watchlist?sort=added,asc')
     json_data = json.loads(response.text)
@@ -45,6 +45,9 @@ def getTraktData():
             episode_title = f'{show_title}: {episode.get("title")}'
             trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'Date_Added': item.get('listed_at'), 'Type': 'episode'})
     
+    return trakt_watchlist
+
+def get_trakt_ratings(encoded_username):  
     # Get Trakt Ratings
     response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/ratings?sort=newest')
     json_data = json.loads(response.text)
@@ -57,21 +60,24 @@ def getTraktData():
         if item['type'] == 'movie':
             movie = item.get('movie')
             movie_id = movie.get('ids', {}).get('imdb')
-            movie_ratings.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': movie_id, 'Date_Added': item.get('rated_at'), 'Type': 'movie'})
+            movie_ratings.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': movie_id, 'Date_Added': item.get('rated_at'), 'WatchedAt': item.get('rated_at'), 'Type': 'movie'})
         elif item['type'] == 'show':
             show = item.get('show')
             show_id = show.get('ids', {}).get('imdb')
-            show_ratings.append({'Title': show.get('title'), 'Year': show.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': show_id, 'Date_Added': item.get('rated_at'), 'Type': 'show'})
+            show_ratings.append({'Title': show.get('title'), 'Year': show.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': show_id, 'Date_Added': item.get('rated_at'), 'WatchedAt': item.get('rated_at'), 'Type': 'show'})
         elif item['type'] == 'episode':
             show = item.get('show')
             show_title = show.get('title')
             episode = item.get('episode')
             episode_id = episode.get('ids', {}).get('imdb')
             episode_title = f'{show_title}: {episode.get("title")}'
-            episode_ratings.append({'Title': episode_title, 'Year': episode.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': episode_id, 'Date_Added': item.get('rated_at'), 'Type': 'episode'})
+            episode_ratings.append({'Title': episode_title, 'Year': episode.get('year'), 'Rating': item.get('rating'), 'IMDB_ID': episode_id, 'Date_Added': item.get('rated_at'), 'WatchedAt': item.get('rated_at'), 'Type': 'episode'})
 
     trakt_ratings = movie_ratings + show_ratings + episode_ratings
+    
+    return trakt_ratings
 
+def get_trakt_comments(encoded_username):  
     # Get Trakt Comments
     response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/comments?sort=newest')
     json_data = json.loads(response.text)
@@ -135,7 +141,10 @@ def getTraktData():
             seen.add(item['IMDB_ID'])
             filtered_comments.append(item)
     trakt_comments = filtered_comments
-            
+    
+    return trakt_comments
+    
+def get_trakt_watch_history(encoded_username):  
     # Get Trakt Watch History
     response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/history?limit=100')
     json_data = json.loads(response.text)
@@ -156,7 +165,7 @@ def getTraktData():
                 imdb_movie_id = movie.get('ids', {}).get('imdb')
                 trakt_movie_id = movie.get('ids', {}).get('trakt')
                 if trakt_movie_id and trakt_movie_id not in seen_ids:
-                    watched_movies.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Type': 'movie'})
+                    watched_movies.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'WatchedAt': movie.get('watched_at'), 'Type': 'movie'})
                     seen_ids.add(trakt_movie_id)
             elif item['type'] == 'episode':
                 show = item.get('show')
@@ -177,8 +186,9 @@ def getTraktData():
                 trakt_episode_id = episode.get('ids', {}).get('trakt')
                 episode_title = f'{show_title}: {episode.get("title")}'
                 episode_year = datetime.datetime.strptime(episode.get('first_aired'), "%Y-%m-%dT%H:%M:%S.%fZ").year if episode.get('first_aired') else None
+                watched_at = episode.get('watched_at')
                 if trakt_episode_id and trakt_episode_id not in seen_ids:
-                    watched_episodes.append({'Title': episode_title, 'Year': episode_year, 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'TraktShowID': trakt_show_id, 'SeasonNumber': season_number, 'EpisodeNumber': episode_number, 'Type': 'episode'})
+                    watched_episodes.append({'Title': episode_title, 'Year': episode_year, 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'TraktShowID': trakt_show_id, 'SeasonNumber': season_number, 'EpisodeNumber': episode_number, 'WatchedAt': watched_at, 'Type': 'episode'})
                     seen_ids.add(trakt_episode_id)
 
     # Filter watched_shows for completed shows where 80% or more of the show has been watched AND where the show's status is "ended" or "cancelled"
@@ -196,8 +206,6 @@ def getTraktData():
     # Update watched_shows with the filtered results
     watched_shows = filtered_watched_shows
 
-    watched_content = watched_movies + watched_shows + watched_episodes
+    trakt_watch_history = watched_movies + watched_shows + watched_episodes
     
-    print('Processing Trakt Data Complete')
-
-    return trakt_watchlist, trakt_ratings, trakt_comments, watched_content
+    return trakt_watch_history

@@ -394,7 +394,9 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
         if trakt_grouped[key] != imdb_grouped[key]
     }
 
-    # print(f"Initial Conflicting Items: {conflicting_items}")
+    '''
+    print(f"Initial Conflicting Items: {conflicting_items}")
+    '''
 
     # Resolve conflicts by checking IMDB_ID redirection using the driver
     for key in conflicting_items:
@@ -426,36 +428,62 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
     return trakt_list, imdb_list, driver, wait
     
 # Function to filter out items that share the same Title, Year, and Type
-# AND have non-matching TMDB_ID values
-def filter_out_mismatched_items(trakt_list, tmdb_list):
+# AND have non-matching IMDB_ID values
+def filter_out_mismatched_items(trakt_list, IMDB_list):
     # Define the keys to be used for comparison
-    comparison_keys = ['Title', 'Year', 'Type', 'TMDB_ID']
+    comparison_keys = ['Title', 'Year', 'Type', 'IMDB_ID']
 
     # Group items by (Title, Year, Type)
     trakt_grouped = {}
     for item in trakt_list:
         if all(key in item for key in comparison_keys):
             key = (item['Title'], item['Year'], item['Type'])
-            trakt_grouped.setdefault(key, set()).add(item['TMDB_ID'])
+            trakt_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
-    tmdb_grouped = {}
-    for item in tmdb_list:
+    IMDB_grouped = {}
+    for item in IMDB_list:
         if all(key in item for key in comparison_keys):
             key = (item['Title'], item['Year'], item['Type'])
-            tmdb_grouped.setdefault(key, set()).add(item['TMDB_ID'])
+            IMDB_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
-    # Find conflicting items (same Title, Year, Type but different TMDB_IDs)
+    # Find conflicting items (same Title, Year, Type but different IMDB_IDs)
     conflicting_items = {
-        key for key in trakt_grouped.keys() & tmdb_grouped.keys()  # Only consider shared keys
-        if trakt_grouped[key] != tmdb_grouped[key]  # Check if TMDB_IDs differ
+        key for key in trakt_grouped.keys() & IMDB_grouped.keys()  # Only consider shared keys
+        if trakt_grouped[key] != IMDB_grouped[key]  # Check if IMDB_IDs differ
     }
     
     # Filter out conflicting items from both lists
     filtered_trakt_list = [
         item for item in trakt_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
     ]
-    filtered_tmdb_list = [
-        item for item in tmdb_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
+    filtered_IMDB_list = [
+        item for item in IMDB_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
     ]
 
-    return filtered_trakt_list, filtered_tmdb_list
+    return filtered_trakt_list, filtered_IMDB_list
+    
+# Function to remove duplicates based on IMDB_ID
+def remove_duplicates_by_imdb_id(watched_content):
+    seen = set()
+    unique_content = []
+    for item in watched_content:
+        if item['IMDB_ID'] not in seen:
+            unique_content.append(item)
+            seen.add(item['IMDB_ID'])
+    return unique_content
+    
+# Function to remove items with Type 'show'
+def remove_shows(watched_content):
+    filtered_content = []
+    for item in watched_content:
+        if item['Type'] != 'show':
+            filtered_content.append(item)
+    return filtered_content
+
+# Filter out setting review IMDB where the comment length is less than 600 characters
+def filter_by_comment_length(lst, min_comment_length=None):
+    result = []
+    for item in lst:
+        if min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length):
+            result.append(item)
+    return result
