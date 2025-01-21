@@ -5,6 +5,7 @@ import time
 import sys
 import argparse
 import subprocess
+import traceback
 from datetime import datetime, timezone, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -75,6 +76,8 @@ def main():
             sync_ratings_value = VC.prompt_sync_ratings()
             remove_watched_from_watchlists_value = VC.prompt_remove_watched_from_watchlists()
             sync_reviews_value = VC.prompt_sync_reviews()
+            sync_watch_history_value = VC.prompt_sync_watch_history()
+            mark_rated_as_watched_value = VC.prompt_mark_rated_as_watched()
             
             # Check if Chrome portable browser is downloaded and up to date
             CC.checkChrome()
@@ -101,6 +104,7 @@ def main():
                 "download.default_directory": directory,
                 "download.directory_upgrade": True,
                 "download.prompt_for_download": False,
+                "profile.default_content_setting_values.automatic_downloads": 1,
                 "credentials_enable_service": False,
                 "profile.password_manager_enabled": False
             })
@@ -222,26 +226,79 @@ def main():
             language_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "span[id*='nav-language-selector-contents'] .selected"))).get_attribute("aria-label")
             original_language = language_element
             if (original_language != "English (United States)"):
-                print("Temporarily changing IMDB Language to English for compatability")
+                print("Temporarily changing IMDB Language to English for compatability. See: https://www.imdb.com/preferences/general")
                 # Open Language Dropdown
                 language_dropdown = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "label[for*='nav-language-selector']")))
                 driver.execute_script("arguments[0].click();", language_dropdown)
                 # Change Language to English
                 english_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "span[id*='nav-language-selector-contents'] li[aria-label*='English (United States)']")))
-                driver.execute_script("arguments[0].click();", english_element)        
+                driver.execute_script("arguments[0].click();", english_element)
             
-            trakt_watchlist, trakt_ratings, trakt_reviews, watched_content = traktData.getTraktData()
-            imdb_watchlist, imdb_ratings, imdb_reviews, errors_found_getting_imdb_reviews = imdbData.getImdbData(imdb_username, imdb_password, driver, directory, wait)
+            # Check IMDB reference view setting for compatability. See: https://www.imdb.com/preferences/general
+            # Load page
+            success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/preferences/general', driver, wait)
+            if not success:
+                # Page failed to load, raise an exception
+                raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+            # Find reference view checkbox
+            reference_checkbox = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id*='ttdp']"))).get_attribute("checked")
+            reference_view_changed = False
+            if reference_checkbox:
+                print("Temporarily disabling reference view IMDB setting for compatability. See: https://www.imdb.com/preferences/general")
+                # Click reference view checkbox
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                driver.execute_script("arguments[0].click();", reference_checkbox)
+                # Submit
+                submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
+                driver.execute_script("arguments[0].click();", submit)
+                reference_view_changed = True
+                time.sleep(1)
+                
+            # Initalize list values
+            trakt_watchlist = trakt_ratings = trakt_reviews = trakt_watch_history = imdb_watchlist = imdb_ratings = imdb_reviews = imdb_watch_history = []
+            
+            # Get Trakt Data
+            print('Processing Trakt Data')
+            trakt_encoded_username = traktData.get_trakt_encoded_username()
+            if sync_watchlist_value or remove_watched_from_watchlists_value:
+                trakt_watchlist = traktData.get_trakt_watchlist(trakt_encoded_username)
+            if sync_ratings_value or mark_rated_as_watched_value:
+                trakt_ratings = traktData.get_trakt_ratings(trakt_encoded_username)
+            if sync_reviews_value:
+                trakt_reviews = traktData.get_trakt_comments(trakt_encoded_username)
+            if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
+                trakt_watch_history = traktData.get_trakt_watch_history(trakt_encoded_username)
+            print('Processing Trakt Data Complete')
+            
+            # Get IMDB Data
+            print('Processing IMDB Data')
+            driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
+            driver, wait = imdbData.download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
+            if sync_watchlist_value or remove_watched_from_watchlists_value:
+                imdb_watchlist, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
+            if sync_ratings_value or mark_rated_as_watched_value:
+                imdb_ratings, driver, wait = imdbData.get_imdb_ratings(driver, wait, directory)
+            if sync_reviews_value:
+                imdb_reviews, errors_found_getting_imdb_reviews, driver, wait = imdbData.get_imdb_reviews(driver, wait, directory)
+            if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
+                imdb_watch_history, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
+            print('Processing IMDB Data Complete')
+            
+            # Remove duplicates from Trakt watch_history
+            if sync_watchlist_value or remove_watched_from_watchlists_value:
+                trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
             
             # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
             trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
             trakt_reviews, imdb_reviews, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_reviews, imdb_reviews, driver, wait)
             trakt_watchlist, imdb_watchlist, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_watchlist, imdb_watchlist, driver, wait)
+            trakt_watch_history, imdb_watch_history, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_watch_history, imdb_watch_history, driver, wait)
             
             # Filter out items that share the same Title, Year and Type, AND have non-matching IMDB_ID values
             trakt_ratings, imdb_ratings = EH.filter_out_mismatched_items(trakt_ratings, imdb_ratings)
             trakt_reviews, imdb_reviews = EH.filter_out_mismatched_items(trakt_reviews, imdb_reviews)
             trakt_watchlist, imdb_watchlist = EH.filter_out_mismatched_items(trakt_watchlist, imdb_watchlist)
+            trakt_watch_history, imdb_watch_history = EH.filter_out_mismatched_items(trakt_watch_history, imdb_watch_history)
                                   
             # Get trakt and imdb data and filter out items with missing imdb id
             trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
@@ -250,7 +307,9 @@ def main():
             imdb_reviews = [review for review in imdb_reviews if review.get('IMDB_ID') is not None]
             trakt_watchlist = [item for item in trakt_watchlist if item.get('IMDB_ID') is not None]
             imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
-            
+            trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
+            imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
+                      
             # Filter out items already set
             imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['IMDB_ID'] not in [imdb_rating['IMDB_ID'] for imdb_rating in imdb_ratings]]
             trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['IMDB_ID'] not in [trakt_rating['IMDB_ID'] for trakt_rating in trakt_ratings]]
@@ -258,6 +317,39 @@ def main():
             trakt_reviews_to_set = [review for review in imdb_reviews if review['IMDB_ID'] not in [trakt_review['IMDB_ID'] for trakt_review in trakt_reviews]]
             imdb_watchlist_to_set = [item for item in trakt_watchlist if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watchlist]]
             trakt_watchlist_to_set = [item for item in imdb_watchlist if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watchlist]]
+            imdb_watch_history_to_set = [item for item in trakt_watch_history if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watch_history]]
+            trakt_watch_history_to_set = [item for item in imdb_watch_history if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watch_history]]
+            
+            if mark_rated_as_watched_value:
+                # Combine Trakt and IMDB Ratings into one list
+                combined_ratings = trakt_ratings + imdb_ratings
+
+                # Remove duplicates from combined_ratings by IMDB_ID
+                combined_ratings = EH.remove_duplicates_by_imdb_id(combined_ratings)
+
+                # Loop through combined ratings and check if they are already in both watch histories
+                for item in combined_ratings:
+                    imdb_id = item['IMDB_ID']
+
+                    # Skip items with 'Type' as 'show' (shows cannot be marked as watched on Trakt)
+                    if item['Type'] == 'show':
+                        continue
+                    
+                    # Check if this imdb_id exists in both trakt_watch_history and imdb_watch_history
+                    if not any(imdb_id == watch_item['IMDB_ID'] for watch_item in trakt_watch_history) and \
+                       not any(imdb_id == watch_item['IMDB_ID'] for watch_item in imdb_watch_history):
+                        # If not found in both, add to the appropriate watch history to set list
+                        trakt_watch_history_to_set.append(item)
+                        imdb_watch_history_to_set.append(item)
+                        trakt_watch_history.append(item)
+                        imdb_watch_history.append(item)
+                        
+                        # Remove duplicates from trakt and imdb watch history (in case items added with mark_rated_as_watched_value)
+                        trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
+                        imdb_watch_history = EH.remove_duplicates_by_imdb_id(imdb_watch_history)
+            
+            # Skip adding shows to trakt watch history, because it will mark all episodes as watched
+            trakt_watch_history_to_set = EH.remove_shows(trakt_watch_history_to_set)
             
             # Filter ratings to update
             imdb_ratings_to_update = []
@@ -287,17 +379,17 @@ def main():
             imdb_ratings_to_set.extend(imdb_ratings_to_update)
             trakt_ratings_to_set.extend(trakt_ratings_to_update)
             
-            # Filter out review items where the comment length is less than 600 characters
-            def filter_by_comment_length(lst, min_comment_length=None):
-                result = []
-                for item in lst:
-                    if min_comment_length is None or ('Comment' in item and len(item['Comment']) >= min_comment_length):
-                        result.append(item)
-                return result
-            imdb_reviews_to_set = filter_by_comment_length(imdb_reviews_to_set, 600)
+            # Filter out setting review IMDB where the comment length is less than 600 characters
+            imdb_reviews_to_set = EH.filter_by_comment_length(imdb_reviews_to_set, 600)
             
             # If remove_watched_from_watchlists_value is true
-            if remove_watched_from_watchlists_value:        
+            if remove_watched_from_watchlists_value:
+                # Combine Trakt and IMDB Watch History into one list
+                watched_content = trakt_watch_history + imdb_watch_history
+                
+                # Remove duplicates from watched_content
+                watched_content = EH.remove_duplicates_by_imdb_id(watched_content)
+                
                 # Get the IDs from watched_content
                 watched_content_ids = set(item['IMDB_ID'] for item in watched_content if item['IMDB_ID'])
                         
@@ -745,7 +837,7 @@ def main():
 
                     print('Removing Watched Items From Trakt Watchlist Complete')
                 else:
-                    print('No Watched Items To Remove From Trakt Watchlist')
+                    print('No Trakt Watchlist Items To Remove')
 
                 # Remove Watched Items IMDB Watchlist
                 if imdb_watchlist_items_to_remove:
@@ -759,7 +851,7 @@ def main():
                         try:
                             item_count += 1
                             year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                            print(f" - Removing item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+                            print(f" - Removing {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
                             success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -793,7 +885,7 @@ def main():
                                             retry_count += 1
 
                                     if retry_count == 2:
-                                        error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
+                                        error_message = f"Failed to remove {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
                                         print(f"   - {error_message}")
                                         EL.logger.error(error_message)
                         
@@ -809,7 +901,7 @@ def main():
                                     driver.execute_script("arguments[0].click();", watchlist_button)
 
                         except (NoSuchElementException, TimeoutException, PageLoadException):
-                            error_message = f"Failed to remove item ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
+                            error_message = f"Failed to remove {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
                             print(f"   - {error_message}")
                             EL.logger.error(error_message, exc_info=True)
                             pass
@@ -817,10 +909,159 @@ def main():
                     
                     print('Removing Watched Items From IMDB Watchlist Complete')
                 else:
-                    print('No Watched Items To Remove From IMDB Watchlist')
+                    print('No IMDB Watchlist Items To Remove')
             
+            # If sync_watch_history_value is true
+            if sync_watch_history_value:
+            
+                # Set Trakt Watch History
+                if trakt_watch_history_to_set:
+                    print('Setting Trakt Watch History')
+
+                    # Set the API endpoint for syncing watch history
+                    watch_history_url = "https://api.trakt.tv/sync/history"
+                    
+                    # Count the total number of items
+                    num_items = len(trakt_watch_history_to_set)
+                    item_count = 0
+                    
+                    # Loop through your data table and set watch history for each item
+                    for item in trakt_watch_history_to_set:
+                        item_count += 1
+                        
+                        # Initialize the data variable for the current item
+                        data = None
+                        
+                        if item["Type"] == "movie":
+                            # This is a movie
+                            data = {
+                                "movies": [{
+                                    "ids": {
+                                        "imdb": item["IMDB_ID"]
+                                    },
+                                    "watched_at": item["WatchedAt"]  # Mark when the movie was watched
+                                }]
+                            }
+                            print(f" - Adding movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
+                        
+                        elif item["Type"] == "episode":
+                            # This is an episode
+                            data = {
+                                "episodes": [{
+                                    "ids": {
+                                        "imdb": item["IMDB_ID"]
+                                    },
+                                    "watched_at": item["WatchedAt"]  # Mark when the episode was watched
+                                }]
+                            }
+                            print(f" - Adding episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
+                        
+                        '''
+                        # Skip adding shows, because it will mark all episodes as watched
+                        elif item["Type"] == "show":
+                            # This is an episode
+                            data = {
+                                "shows": [{
+                                    "ids": {
+                                        "imdb": item["IMDB_ID"]
+                                    },
+                                    "watched_at": item["WatchedAt"]  # Mark when the episode was watched
+                                }]
+                            }
+                            print(f" - Adding show ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
+                        '''
+                        
+                        if data:
+                            # Make the API call to mark the item as watched
+                            response = EH.make_trakt_request(watch_history_url, payload=data)
+                            
+                            if response is None:
+                                error_message = f"Failed to add {item['Type']} ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})"
+                                print(f"   - {error_message}")
+                                EL.logger.error(error_message)
+
+                    print('Setting Trakt Watch History Complete')
+                else:
+                    print('No Trakt Watch History To Set')
+                    
+                # Set IMDB Watch History Items
+                if imdb_watch_history_to_set:
+                    print('Setting IMDB Watch History Items')
+                    
+                    # Count the total number of items
+                    num_items = len(imdb_watch_history_to_set)
+                    item_count = 0
+                                    
+                    for item in imdb_watch_history_to_set:
+                        try:
+                            item_count += 1
+                            year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
+                            print(f" - Adding {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})")
+                            
+                            # Load page
+                            success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
+                            if not success:
+                                # Page failed to load, raise an exception
+                                raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+                            
+                            current_url = driver.current_url
+                            
+                            # Check if the URL doesn't contain "/reference"
+                            if "/reference" not in current_url:
+                                # Wait until the loader has disappeared, indicating the watch history button has loaded
+                                wait.until(EC.invisibility_of_element_located((By.CSS_SELECTOR, '[data-testid="tm-box-wl-loader"]')))
+                                
+                                # Scroll the page to bring the element into view
+                                watch_history_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-addtolist-button"]')))
+                                driver.execute_script("arguments[0].scrollIntoView(true);", watch_history_button)
+                                
+                                # Wait for the element to be clickable
+                                watch_history_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[data-testid="tm-box-addtolist-button"]')))
+                                
+                                driver.execute_script("arguments[0].click();", watch_history_button)
+                                
+                                watch_history_button = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                
+                                watch_history_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                                                
+                                # Check if item is already in watch history otherwise skip it
+                                if 'true' not in watch_history_button.get_attribute('data-titleinlist'):
+                                    retry_count = 0
+                                    while retry_count < 2:
+                                        driver.execute_script("arguments[0].click();", watch_history_button)
+                                        try:
+                                            WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'ipc-promptable-base__content')]//div[@data-titleinlist='true']")))
+                                            break  # Break the loop if successful
+                                        except TimeoutException:
+                                            retry_count += 1
+
+                                    if retry_count == 2:
+                                        error_message = f"Failed to add {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})"
+                                        print(f"   - {error_message}")
+                                        EL.logger.error(error_message)
+                            else:
+                                # Handle the case when the URL contains "/reference"
+                                error_message1 = f"IMDB reference view setting is enabled. Adding items to IMDB Check-ins is not supported. See: https://www.imdb.com/preferences/general"
+                                error_message2 = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})"
+                                print(f"   - {error_message1}")
+                                print(f"   - {error_message2}")
+                                EL.logger.error(error_message1)
+                                EL.logger.error(error_message2)
+                            
+                        except (NoSuchElementException, TimeoutException, PageLoadException):
+                            error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})"
+                            print(f"   - {error_message}")
+                            EL.logger.error(error_message, exc_info=True)
+                            pass
+
+                    
+                    print('Setting IMDB Watch History Items Complete')
+                else:
+                    print('No IMDB Watch History Items To Set')
+            
+            # Change language back to original if was changed
             if (original_language != "English (United States)"):
-                print("Changing IMDB Language Back to Original")
+                print("Changing IMDB Language Back to Original. See: https://www.imdb.com/preferences/general")
                 # go to IMDB homepage
                 success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
                 if not success:
@@ -834,6 +1075,22 @@ def main():
                 # Change Language to Original
                 original_language_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"span[id*='nav-language-selector-contents'] li[aria-label*='{original_language}']")))
                 driver.execute_script("arguments[0].click();", original_language_element)
+                
+            # Find reference view checkbox
+            if reference_view_changed:
+                print("Changing reference view IMDB setting back to original. See: https://www.imdb.com/preferences/general")
+                # Load page
+                success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/preferences/general', driver, wait)
+                if not success:
+                    # Page failed to load, raise an exception
+                    raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
+                # Click reference view checkbox
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                driver.execute_script("arguments[0].click();", reference_checkbox)
+                # Submit
+                submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
+                driver.execute_script("arguments[0].click();", submit)
+                time.sleep(1)
             
             #Close web driver
             print("Closing webdriver...")
