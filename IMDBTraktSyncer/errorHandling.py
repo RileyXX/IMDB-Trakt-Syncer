@@ -5,6 +5,7 @@ import time
 import os
 import inspect
 import json
+import re
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -354,6 +355,10 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
     print(f"Max retries reached. Request to {url} failed.")
     return None
     
+# Function to clean a title by removing non-alphanumeric characters
+def clean_title(title):
+    return re.sub(r'[^a-zA-Z0-9. ]', '', title).lower()
+    
 # Function to resolve IMDB_ID redirection using the driver
 def resolve_imdb_id_with_driver(imdb_id, driver, wait):
     try:
@@ -377,17 +382,21 @@ def resolve_imdb_id_with_driver(imdb_id, driver, wait):
 def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
     comparison_keys = ['Title', 'Type', 'IMDB_ID']  # Only compare Title and Type
 
-    # Group items by (Title, Type)
+    # Group items by (Title, Type), cleaning the Title
     trakt_grouped = {}
     for item in trakt_list:
         if all(key in item for key in comparison_keys):
-            key = (item['Title'], item['Type'])
+            # Clean Title before creating the key
+            cleaned_title = clean_title(item['Title'])
+            key = (cleaned_title, item['Type'])
             trakt_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
     imdb_grouped = {}
     for item in imdb_list:
         if all(key in item for key in comparison_keys):
-            key = (item['Title'], item['Type'])
+            # Clean Title before creating the key
+            cleaned_title = clean_title(item['Title'])
+            key = (cleaned_title, item['Type'])
             imdb_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
     # Find conflicting items based on Title and Type where IMDB_IDs are different
@@ -395,11 +404,11 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
         key for key in trakt_grouped.keys() & imdb_grouped.keys()
         if trakt_grouped[key] != imdb_grouped[key]
     }
-
+    
     '''
     print(f"Initial Conflicting Items: {conflicting_items}")
     '''
-
+    
     # Resolve conflicts by checking IMDB_ID redirection using the driver
     for key in conflicting_items:
         trakt_ids = trakt_grouped[key]
@@ -418,7 +427,7 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
 
         # Skip resolving IMDB_IDs in imdb_list as they're already current
         resolved_imdb_ids = imdb_ids
-
+        
         '''
         # If resolved trakt IDs match imdb IDs, the conflict is considered resolved
         if resolved_trakt_ids == resolved_imdb_ids:
@@ -426,26 +435,28 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
         else:
             print(f"Conflict not resolved for: {key}")
         '''
-
+    
     return trakt_list, imdb_list, driver, wait
     
 # Function to filter out items that share the same Title, Year, and Type
-# AND have non-matching IMDB_ID values
+# AND have non-matching IMDB_ID values, using cleaned titles for comparison
 def filter_out_mismatched_items(trakt_list, IMDB_list):
     # Define the keys to be used for comparison
     comparison_keys = ['Title', 'Year', 'Type', 'IMDB_ID']
 
-    # Group items by (Title, Year, Type)
+    # Group items by (Title, Year, Type), cleaning the Title for comparison
     trakt_grouped = {}
     for item in trakt_list:
         if all(key in item for key in comparison_keys):
-            key = (item['Title'], item['Year'], item['Type'])
+            cleaned_title = clean_title(item['Title'])  # Clean the Title for comparison
+            key = (cleaned_title, item['Year'], item['Type'])
             trakt_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
     IMDB_grouped = {}
     for item in IMDB_list:
         if all(key in item for key in comparison_keys):
-            key = (item['Title'], item['Year'], item['Type'])
+            cleaned_title = clean_title(item['Title'])  # Clean the Title for comparison
+            key = (cleaned_title, item['Year'], item['Type'])
             IMDB_grouped.setdefault(key, set()).add(item['IMDB_ID'])
 
     # Find conflicting items (same Title, Year, Type but different IMDB_IDs)
@@ -453,13 +464,13 @@ def filter_out_mismatched_items(trakt_list, IMDB_list):
         key for key in trakt_grouped.keys() & IMDB_grouped.keys()  # Only consider shared keys
         if trakt_grouped[key] != IMDB_grouped[key]  # Check if IMDB_IDs differ
     }
-    
+
     # Filter out conflicting items from both lists
     filtered_trakt_list = [
-        item for item in trakt_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
+        item for item in trakt_list if (clean_title(item['Title']), item['Year'], item['Type']) not in conflicting_items
     ]
     filtered_IMDB_list = [
-        item for item in IMDB_list if (item['Title'], item['Year'], item['Type']) not in conflicting_items
+        item for item in IMDB_list if (clean_title(item['Title']), item['Year'], item['Type']) not in conflicting_items
     ]
 
     return filtered_trakt_list, filtered_IMDB_list
@@ -513,7 +524,7 @@ def sort_by_date_added(items, descending=False):
 
     return sorted(items, key=parse_date, reverse=descending)
     
-def check_and_update_watch_history(list):
+def check_if_watch_history_limit_reached(list):
     """
     Checks if the list has 10,000 or more items.
     If true, updates the sync_watch_history in credentials.txt to False
@@ -548,6 +559,92 @@ def check_and_update_watch_history(list):
             with open(file_path, 'w', encoding='utf-8') as file:
                 json.dump(credentials, file, indent=4, separators=(', ', ': '))
             print("IMDB watch history has reached the 10,000 item limit. sync_watch_history value set to False. Watch history will no longer be synced.")
+            return True  # Return True indicating limit reached and updated the credentials
+        except Exception as e:
+            print("Failed to write to credentials file.", exc_info=True)
+            return False  # Return False if there was an error while updating the file
+
+    # Return False if the limit hasn't been reached
+    return False
+    
+def check_if_watchlist_limit_reached(list):
+    """
+    Checks if the list has 10,000 or more items.
+    If true, updates the sync_watchlist in credentials.txt to False
+    and marks the watchlist limit as reached.
+    
+    Args:
+        list (list): List of the user's watchlist.
+    
+    Returns:
+        bool: True if the watchlist limit has been reached, False otherwise.
+    """
+    # Define the file path for credentials.txt
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+    
+    # Load the credentials file
+    credentials = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        print("Credentials file not found. A new file will be created if needed.", exc_info=True)
+        return False  # Return False if the file doesn't exist
+
+    # Check if list has 10,000 or more items
+    if len(list) >= 9999:
+        # Update sync_watchlist to False
+        credentials['sync_watchlist'] = False
+        
+        # Mark that the watchlist limit has been reached
+        try:
+            with open(file_path, 'w', encoding='utf-8') as file:
+                json.dump(credentials, file, indent=4, separators=(', ', ': '))
+            print("IMDB watchlist has reached the 10,000 item limit. sync_watchlist value set to False. Watchlist will no longer be synced.")
+            return True  # Return True indicating limit reached and updated the credentials
+        except Exception as e:
+            print("Failed to write to credentials file.", exc_info=True)
+            return False  # Return False if there was an error while updating the file
+
+    # Return False if the limit hasn't been reached
+    return False
+    
+def check_if_ratings_limit_reached(list):
+    """
+    Checks if the list has 10,000 or more items.
+    If true, updates the sync_ratings in credentials.txt to False
+    and marks the ratings limit as reached.
+    
+    Args:
+        list (list): List of the user's ratings.
+    
+    Returns:
+        bool: True if the ratings limit has been reached, False otherwise.
+    """
+    # Define the file path for credentials.txt
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+    
+    # Load the credentials file
+    credentials = {}
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+    except FileNotFoundError:
+        print("Credentials file not found. A new file will be created if needed.", exc_info=True)
+        return False  # Return False if the file doesn't exist
+
+    # Check if list has 10,000 or more items
+    if len(list) >= 9999:
+        # Update sync_ratings to False
+        credentials['sync_ratings'] = False
+        
+        # Mark that the ratings limit has been reached
+        try:
+            with open(file_path, 'w', encoding='utf-8') as file:
+                json.dump(credentials, file, indent=4, separators=(', ', ': '))
+            print("IMDB ratings have reached the 10,000 item limit. sync_ratings value set to False. Ratings will no longer be synced.")
             return True  # Return True indicating limit reached and updated the credentials
         except Exception as e:
             print("Failed to write to credentials file.", exc_info=True)
