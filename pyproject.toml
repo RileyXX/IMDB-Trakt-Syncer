@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "IMDBTraktSyncer"
-version = "3.4.1"
-description = "A python script that syncs user watchlist, ratings and reviews for Movies, TV Shows and Episodes both ways between Trakt and IMDB."
+version = "3.4.2"
+description = "A python script that syncs user watchlist, ratings, reviews and watch history for Movies, TV Shows and Episodes both ways between Trakt and IMDB."
 authors = [
     {name = "RileyXX"}
 ]

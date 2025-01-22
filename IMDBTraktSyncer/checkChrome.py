@@ -6,7 +6,6 @@ import platform
 import sys
 import time
 import subprocess
-import tempfile
 import stat
 from pathlib import Path
 from selenium import webdriver
@@ -267,9 +266,7 @@ def is_chromedriver_up_to_date(main_directory, current_version):
     print(f"Chromedriver binary not found under {chromedriver_dir}.")
     return False
 
-def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=5):
-    temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
-    temp_zip_path = Path(temp_dir) / f"chrome-{version}.zip"
+def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=60):
     zip_path = Path(main_directory) / f"chrome-{version}.zip"
     extract_path = Path(main_directory) / "Chrome" / version
 
@@ -277,7 +274,7 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
     Path(main_directory).mkdir(parents=True, exist_ok=True)
 
     try:
-        # Download the zip file
+        # Download the zip file directly to the main directory
         response = EH.make_request_with_retries(download_url, stream=True)
         response.raise_for_status()
 
@@ -285,30 +282,20 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
         expected_file_size = int(response.headers.get('Content-Length', 0))
         print(f" - Expected file size: {expected_file_size} bytes")
 
-        # Write the zip file to a temporary location
-        with open(temp_zip_path, "wb") as temp_file:
+        # Write the zip file to the final location
+        with open(zip_path, "wb") as zip_file:
             for chunk in response.iter_content(chunk_size=8192):
-                temp_file.write(chunk)
+                zip_file.write(chunk)
 
+        # Final wait to ensure the download is complete before extracting
+        time.sleep(wait_interval)
+        
         # Validate the downloaded file size
-        actual_file_size = temp_zip_path.stat().st_size
+        actual_file_size = zip_path.stat().st_size
         print(f" - Downloaded file size: {actual_file_size} bytes")
-
-        # Retry until file sizes match or timeout occurs
-        time_waited = 0
-        while expected_file_size and actual_file_size != expected_file_size and time_waited < max_wait_time:
-            print(f" - File size mismatch. Waiting for {wait_interval} seconds before checking again...")
-            time.sleep(wait_interval)
-            time_waited += wait_interval
-            actual_file_size = temp_zip_path.stat().st_size
-            print(f" - Downloaded file size (after waiting): {actual_file_size} bytes")
 
         if expected_file_size and actual_file_size != expected_file_size:
             raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
-
-        # Move the temp file to the final location
-        shutil.move(str(temp_zip_path), str(zip_path))
-        print(f" - Download complete. File moved to: {zip_path}")
 
         # Verify the integrity of the ZIP file before extraction
         if not zipfile.is_zipfile(zip_path):
@@ -349,9 +336,7 @@ def download_and_extract_chrome(download_url, main_directory, version, max_wait_
 
     return extract_path
     
-def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=300, wait_interval=5):
-    temp_dir = tempfile.gettempdir()  # Use a temporary directory for the download
-    temp_zip_path = Path(temp_dir) / f"chromedriver-{version}.zip"
+def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=300, wait_interval=60):
     zip_path = Path(main_directory) / f"chromedriver-{version}.zip"
     extract_path = Path(main_directory) / "Chromedriver" / version
 
@@ -359,7 +344,7 @@ def download_and_extract_chromedriver(download_url, main_directory, version, max
     Path(main_directory).mkdir(parents=True, exist_ok=True)
 
     try:
-        # Download the zip file
+        # Download the zip file directly to the main directory
         response = EH.make_request_with_retries(download_url, stream=True)
         response.raise_for_status()
 
@@ -367,30 +352,20 @@ def download_and_extract_chromedriver(download_url, main_directory, version, max
         expected_file_size = int(response.headers.get('Content-Length', 0))
         print(f" - Expected file size: {expected_file_size} bytes")
 
-        # Write the zip file to a temporary location
-        with open(temp_zip_path, "wb") as temp_file:
+        # Write the zip file to the final location
+        with open(zip_path, "wb") as zip_file:
             for chunk in response.iter_content(chunk_size=8192):
-                temp_file.write(chunk)
+                zip_file.write(chunk)
 
+        # Final wait to ensure the download is complete before extracting
+        time.sleep(wait_interval)
+        
         # Validate the downloaded file size
-        actual_file_size = temp_zip_path.stat().st_size
+        actual_file_size = zip_path.stat().st_size
         print(f" - Downloaded file size: {actual_file_size} bytes")
-
-        # Retry until file sizes match or timeout occurs
-        time_waited = 0
-        while expected_file_size and actual_file_size != expected_file_size and time_waited < max_wait_time:
-            print(f" - File size mismatch. Waiting for {wait_interval} seconds before checking again...")
-            time.sleep(wait_interval)
-            time_waited += wait_interval
-            actual_file_size = temp_zip_path.stat().st_size
-            print(f" - Downloaded file size (after waiting): {actual_file_size} bytes")
 
         if expected_file_size and actual_file_size != expected_file_size:
             raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
-
-        # Move the temp file to the final location
-        shutil.move(str(temp_zip_path), str(zip_path))
-        print(f" - Download complete. File moved to: {zip_path}")
 
         # Verify the integrity of the ZIP file before extraction
         if not zipfile.is_zipfile(zip_path):

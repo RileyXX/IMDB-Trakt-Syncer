@@ -284,9 +284,17 @@ def main():
                 imdb_watch_history, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
             print('Processing IMDB Data Complete')
                         
-            if sync_watchlist_value or remove_watched_from_watchlists_value:
-                # Check if IMDB watch history has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
-                imdb_watchlist_limit_reached = EH.check_and_update_watch_history(imdb_watch_history)
+            if sync_watchlist_value:
+                # Check if IMDB watchlist has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
+                imdb_watchlist_limit_reached = EH.check_if_watchlist_limit_reached(imdb_watchlist)
+                
+            if sync_ratings_value:
+                # Check if IMDB ratings has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
+                imdb_ratings_limit_reached = EH.check_if_ratings_limit_reached(imdb_ratings)
+                
+            if sync_watch_history_value or mark_rated_as_watched_value:
+                # Check if IMDB watch history has reached the 10,000 item limit. If limit is reached, disable syncing watch history.
+                imdb_watch_history_limit_reached = EH.check_if_watch_history_limit_reached(imdb_watch_history)
             
             # Remove duplicates from Trakt watch_history
             trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
@@ -405,6 +413,10 @@ def main():
                 trakt_watchlist_items_to_remove = [item for item in trakt_watchlist if item['IMDB_ID'] in watched_content_ids]
                 # Find items to remove from imdb_watchlist
                 imdb_watchlist_items_to_remove = [item for item in imdb_watchlist if item['IMDB_ID'] in watched_content_ids]
+                
+                # Sort lists by date
+                trakt_watchlist_items_to_remove = EH.sort_by_date_added(trakt_watchlist_items_to_remove)
+                imdb_watchlist_items_to_remove = EH.sort_by_date_added(imdb_watchlist_items_to_remove)
             
             # Sort lists by date
             imdb_ratings_to_set = EH.sort_by_date_added(imdb_ratings_to_set)
@@ -413,16 +425,22 @@ def main():
             trakt_watchlist_to_set = EH.sort_by_date_added(trakt_watchlist_to_set)
             imdb_watch_history_to_set = EH.sort_by_date_added(imdb_watch_history_to_set)
             trakt_watch_history_to_set = EH.sort_by_date_added(trakt_watch_history_to_set)
-            trakt_watchlist_items_to_remove = EH.sort_by_date_added(trakt_watchlist_items_to_remove)
-            imdb_watchlist_items_to_remove = EH.sort_by_date_added(imdb_watchlist_items_to_remove)
             
-            if sync_watchlist_value or remove_watched_from_watchlists_value:
-                if imdb_watchlist_limit_reached:
-                    # IMDB watchlist limit reached, skip watchlist actions
-                    trakt_watchlist_to_set = []
-                    imdb_watchlist_to_set = []
-                    trakt_watchlist_items_to_remove = []
-                    imdb_watchlist_items_to_remove = []
+            if sync_watchlist_value and imdb_watch_history_limit_reached:
+                # IMDB watchlist limit reached, skip watchlist actions
+                trakt_watchlist_to_set = []
+                imdb_watchlist_to_set = []
+                
+            if sync_ratings_value or mark_rated_as_watched_value:
+                if imdb_ratings_limit_reached:
+                    # IMDB ratings limit reached, skip ratings actions
+                    trakt_ratings_to_set = []
+                    imdb_ratings_to_set = []
+            
+            if sync_watch_history_value and imdb_watch_history_limit_reached:
+                # IMDB watch history limit reached, skip watch history actions
+                trakt_watch_history_to_set = []
+                trakt_watch_history_to_set = []
                         
             # If sync_watchlist_value is true
             if sync_watchlist_value:
@@ -436,7 +454,17 @@ def main():
 
                     for item in trakt_watchlist_to_set:
                         item_count += 1
-                        print(f" - Adding item ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watchlist ({item['IMDB_ID']})")
+                        
+                        season_number = item.get('SeasonNumber')
+                        episode_number = item.get('EpisodeNumber')
+                        if season_number and episode_number:
+                            season_number = str(season_number).zfill(2)
+                            episode_number = str(episode_number).zfill(2)
+                            episode_title = f'[S{season_number}E{episode_number}] '
+                        else:
+                            episode_title = ''
+                        
+                        print(f" - Adding item ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) to Trakt Watchlist ({item['IMDB_ID']})")
                         imdb_id = item['IMDB_ID']
                         media_type = item['Type']  # 'movie', 'show', or 'episode'
 
@@ -492,8 +520,18 @@ def main():
                     for item in imdb_watchlist_to_set:
                         try:
                             item_count += 1
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                            
                             year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                            print(f" - Adding item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
+                            print(f" - Adding item ({item_count} of {num_items}): {episode_title}{item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
                             success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -593,6 +631,16 @@ def main():
                             print(f" - Rating movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
                         elif item["Type"] == "episode":
                             # This is an episode
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                            
                             data = {
                                 "episodes": [{
                                     "ids": {
@@ -601,7 +649,7 @@ def main():
                                     "rating": item["Rating"]
                                 }]
                             }
-                            print(f" - Rating episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
+                            print(f" - Rating episode ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}): {item['Rating']}/10 on Trakt ({item['IMDB_ID']})")
                         else:
                             data = None
                         
@@ -624,9 +672,18 @@ def main():
 
                     # loop through each movie and TV show rating and submit rating on IMDB website
                     for i, item in enumerate(imdb_ratings_to_set, 1):
+                        
+                        season_number = item.get('SeasonNumber')
+                        episode_number = item.get('EpisodeNumber')
+                        if season_number and episode_number:
+                            season_number = str(season_number).zfill(2)
+                            episode_number = str(episode_number).zfill(2)
+                            episode_title = f'[S{season_number}E{episode_number}] '
+                        else:
+                            episode_title = ''
 
                         year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                        print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
+                        print(f' - Rating {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
                         
                         try:
                             # Load page
@@ -644,18 +701,29 @@ def main():
                                 
                                 # Wait until rate button is located and scroll to it
                                 button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                                driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                                # driver.execute_script("arguments[0].scrollIntoView(true);", button)
 
                                 # click on "Rate" button and select rating option, then submit rating
                                 button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                                 element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"]')
                                 if element_rating_bar:
-                                    driver.execute_script("arguments[0].click();", button)
-                                    rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
-                                    driver.execute_script("arguments[0].click();", rating_option_element)
-                                    submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                                    submit_element.click()
-                                    time.sleep(1)
+                                    try:
+                                        has_existing_rating = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"] span')
+                                        existing_rating = int(has_existing_rating.text.strip())
+                                    except NoSuchElementException:
+                                        existing_rating = None 
+                                        
+                                    if existing_rating != item["Rating"]:
+                                        driver.execute_script("arguments[0].click();", button)
+                                        rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                                        driver.execute_script("arguments[0].click();", rating_option_element)
+                                        submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                                        submit_element.click()
+                                        time.sleep(1)
+                                    else:
+                                        error_message = (f"   - Failed: Rating already exists on IMDB for this {item['Type']}. Rating: ({item['Rating']})")
+                                        print(error_message)
+                                        EL.logger.error(error_message)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 
@@ -699,7 +767,17 @@ def main():
 
                         for item in trakt_reviews_to_set:
                             item_count += 1
-                            print(f" - Submitting comment ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on Trakt ({item['IMDB_ID']})")
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                            
+                            print(f" - Submitting comment ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on Trakt ({item['IMDB_ID']})")
                             imdb_id = item['IMDB_ID']
                             comment = item['Comment']
                             media_type = item['Type']  # 'movie', 'show', or 'episode'
@@ -756,7 +834,17 @@ def main():
                             for item in imdb_reviews_to_set:
                                 item_count += 1
                                 try:
-                                    print(f" - Submitting review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
+                                
+                                    season_number = item.get('SeasonNumber')
+                                    episode_number = item.get('EpisodeNumber')
+                                    if season_number and episode_number:
+                                        season_number = str(season_number).zfill(2)
+                                        episode_number = str(episode_number).zfill(2)
+                                        episode_title = f'[S{season_number}E{episode_number}] '
+                                    else:
+                                        episode_title = ''
+                                
+                                    print(f" - Submitting review ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
                                     success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
@@ -835,7 +923,18 @@ def main():
                             }
                             print(f" - Removing movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
                         elif item["Type"] == "episode":
+                            
                             # This is an episode
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                            
                             data = {
                                 "episodes": [{
                                     "ids": {
@@ -843,7 +942,7 @@ def main():
                                     }
                                 }]
                             }
-                            print(f" - Removing episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
+                            print(f" - Removing episode ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) from Trakt Watchlist ({item['IMDB_ID']})")
                         else:
                             data = None
 
@@ -871,8 +970,18 @@ def main():
                     for item in imdb_watchlist_items_to_remove:
                         try:
                             item_count += 1
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                                
                             year_str = f' ({item["Year"]})' if item["Year"] is not None else '' # sometimes year is None for episodes from trakt so remove it from the print string
-                            print(f" - Removing {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
+                            print(f" - Removing {item['Type']} ({item_count} of {num_items}): {episode_title}{item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})")
                             
                             # Load page
                             success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -909,6 +1018,10 @@ def main():
                                         error_message = f"Failed to remove {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} from IMDB Watchlist ({item['IMDB_ID']})"
                                         print(f"   - {error_message}")
                                         EL.logger.error(error_message)
+                                else:
+                                    error_message = (f"   - Failed: {item['Type'].capitalize()} not in IMDB watchlist.")
+                                    print(error_message)
+                                    EL.logger.error(error_message)
                         
                             else:
                                 # Handle the case when the URL contains "/reference"
@@ -966,7 +1079,18 @@ def main():
                             print(f" - Adding movie ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
                         
                         elif item["Type"] == "episode":
+                        
                             # This is an episode
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                                
                             data = {
                                 "episodes": [{
                                     "ids": {
@@ -975,7 +1099,7 @@ def main():
                                     "watched_at": item["WatchedAt"]  # Mark when the episode was watched
                                 }]
                             }
-                            print(f" - Adding episode ({item_count} of {num_items}): {item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
+                            print(f" - Adding episode ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) to Trakt Watch History ({item['IMDB_ID']})")
                         
                         '''
                         # Skip adding shows, because it will mark all episodes as watched
@@ -1016,9 +1140,18 @@ def main():
                     for item in imdb_watch_history_to_set:
                         try:
                             item_count += 1
-
+                            
+                            season_number = item.get('SeasonNumber')
+                            episode_number = item.get('EpisodeNumber')
+                            if season_number and episode_number:
+                                season_number = str(season_number).zfill(2)
+                                episode_number = str(episode_number).zfill(2)
+                                episode_title = f'[S{season_number}E{episode_number}] '
+                            else:
+                                episode_title = ''
+                                
                             year_str = f' ({item.get("Year")})' if item.get("Year") is not None else ''  # Handles None safely
-                            print(f" - Adding {item.get('Type')} ({item_count} of {num_items}): {item.get('Title')}{year_str} to IMDB Watch History ({item.get('IMDB_ID')})")
+                            print(f" - Adding {item.get('Type')} ({item_count} of {num_items}): {episode_title}{item.get('Title')}{year_str} to IMDB Watch History ({item.get('IMDB_ID')})")
                             
                             # Load page
                             success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://www.imdb.com/title/{item["IMDB_ID"]}/', driver, wait)
@@ -1061,6 +1194,10 @@ def main():
                                         error_message = f"Failed to add {item['Type']} ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})"
                                         print(f"   - {error_message}")
                                         EL.logger.error(error_message)
+                                else:
+                                    error_message = (f"   - Failed: {item['Type'].capitalize()} already exists in IMDB watch history.")
+                                    print(error_message)
+                                    EL.logger.error(error_message)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 error_message1 = f"IMDB reference view setting is enabled. Adding items to IMDB Check-ins is not supported. See: https://www.imdb.com/preferences/general"
