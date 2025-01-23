@@ -427,3 +427,74 @@ def prompt_remove_watched_from_watchlists():
         raise e
 
     return remove_watched_from_watchlists_value
+    
+def prompt_remove_watchlist_items_older_than_x_days():
+    """
+    Prompts the user to decide if watchlist items older than a certain number of days should be removed.
+    Reads and updates the decision and the number of days in a credentials file to avoid repeated prompting.
+    """
+    # Define the file path for credentials
+    here = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(here, 'credentials.txt')
+
+    # Attempt to read the existing configuration
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            credentials = json.load(file)
+            remove_watchlist_items_older_than_x_days = credentials.get('remove_watchlist_items_older_than_x_days')
+            watchlist_days_to_remove = credentials.get('watchlist_days_to_remove')
+
+            if (
+                remove_watchlist_items_older_than_x_days is not None 
+                and remove_watchlist_items_older_than_x_days != "empty"
+                and watchlist_days_to_remove is not None
+            ):
+                return remove_watchlist_items_older_than_x_days, watchlist_days_to_remove  # Return stored values if they exist
+    except FileNotFoundError:
+        # Log the error if the file is missing but continue execution
+        print("Credentials file not found. A new one will be created.")
+        credentials = {}
+
+    # Prompt the user for input until a valid choice is made
+    while True:
+        print('If choosing (y) in the following, you will be prompted to enter the number of days.')
+        print('This setting is meant to help address the 100 item limit in Trakt watchlists for free tier users.')
+        print('In order to prevent old items from being re-added, it is recommended to disable Trakt watchlist sync')
+        print('in other projects when enabling this setting. Such as Reelgood and other similar apps.')
+        print('If you use the PlexTraktSync project, it is recommended to disable watchlist sync from Plex to Trakt.')
+        print("Do you want to remove watchlist items older than x number of days? (y/n)")
+        user_input = input("Enter your choice: ").strip().lower()
+
+        if user_input == 'y':
+            remove_watchlist_items_older_than_x_days = True
+            break
+        elif user_input == 'n':
+            remove_watchlist_items_older_than_x_days = False
+            watchlist_days_to_remove = None
+            break
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+    # If the user chose 'y', prompt for the number of days
+    if remove_watchlist_items_older_than_x_days:
+        while True:
+            try:
+                print("For reference: (30 = 1 month, 90 = 3 months, 180 = 6 months, 365 = 1 year). Any number of days is valid.")
+                print("How many days old should the items be to be removed?")
+                watchlist_days_to_remove = int(input("Enter the number of days: ").strip())
+                break
+            except ValueError:
+                print("Invalid input. Please enter a valid number.")
+
+    # Save the user's choice and the number of days to the credentials file
+    credentials['remove_watchlist_items_older_than_x_days'] = remove_watchlist_items_older_than_x_days
+    credentials['watchlist_days_to_remove'] = watchlist_days_to_remove
+    
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            json.dump(credentials, file, indent=4, separators=(', ', ': '))
+    except Exception as e:
+        print("Failed to write to credentials file.", e)
+        raise e
+
+    return remove_watchlist_items_older_than_x_days, watchlist_days_to_remove
