@@ -6,7 +6,7 @@ import os
 import inspect
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -84,7 +84,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
                 retry_after = int(response.headers.get('Retry-After', retry_delay))
                 if response.status_code != 429:
                     remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
-                    print(f"   - Server returned {response.status_code}. Retrying after {retry_after}s... "
+                    print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
                           f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
                     EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
                                       f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
@@ -96,7 +96,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
                 # Handle non-retryable HTTP status codes
                 status_message = get_trakt_message(response.status_code)
                 error_message = f"Request failed with status code {response.status_code}: {status_message}"
-                print(f"   - {error_message}")
+                print(f" - {error_message}")
                 EL.logger.error(f"{error_message}. URL: {url}")
                 return response  # Exit with failure for non-retryable errors
 
@@ -104,7 +104,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
             retry_attempts += 1  # Increment retry counter
             remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
-            print(f"   - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
+            print(f" - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
                   f"Time remaining: {remaining_time}s")
             EL.logger.warning(f"Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
                               f"Time remaining: {remaining_time}s")
@@ -115,13 +115,13 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
         # Handle general request-related exceptions (non-retryable)
         except requests.exceptions.RequestException as req_err:
             error_message = f"Request failed with exception: {req_err}"
-            print(f"   - {error_message}")
+            print(f" - {error_message}")
             EL.logger.error(error_message, exc_info=True)
             return None  # Exit on non-retryable exceptions
 
     # If all retries are exhausted, log and return failure
     error_message = "Max retry attempts reached with Trakt API, request failed."
-    print(f"   - {error_message}")
+    print(f" - {error_message}")
     EL.logger.error(error_message)
     return None
 
@@ -435,6 +435,7 @@ def update_outdated_imdb_ids_from_trakt(trakt_list, imdb_list, driver, wait):
         else:
             print(f"Conflict not resolved for: {key}")
         '''
+        
     
     return trakt_list, imdb_list, driver, wait
     
@@ -474,6 +475,22 @@ def filter_out_mismatched_items(trakt_list, IMDB_list):
     ]
 
     return filtered_trakt_list, filtered_IMDB_list
+    
+def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imdb_id(combined_watchlist_to_remove, imdb_watchlist_to_set, trakt_watchlist_to_set):
+    # Extract IMDB_IDs from the items to remove
+    imdb_ids_to_remove = {item['IMDB_ID'] for item in combined_watchlist_to_remove}
+
+    # Filter imdb_watchlist_to_set, keeping items not in imdb_ids_to_remove
+    imdb_watchlist_to_set = [
+        item for item in imdb_watchlist_to_set if item['IMDB_ID'] not in imdb_ids_to_remove
+    ]
+
+    # Filter trakt_watchlist_to_set, keeping items not in imdb_ids_to_remove
+    trakt_watchlist_to_set = [
+        item for item in trakt_watchlist_to_set if item['IMDB_ID'] not in imdb_ids_to_remove
+    ]
+
+    return imdb_watchlist_to_set, trakt_watchlist_to_set
     
 # Function to remove duplicates based on IMDB_ID
 def remove_duplicates_by_imdb_id(watched_content):
@@ -524,6 +541,30 @@ def sort_by_date_added(items, descending=False):
 
     return sorted(items, key=parse_date, reverse=descending)
     
+def get_items_older_than_x_days(items, days):
+    """
+    Returns items older than a specified number of days based on the 'Date_Added' field.
+
+    Args:
+        items (list): A list of dictionaries or objects with a 'Date_Added' field.
+        days (int): The number of days to use as the cutoff.
+
+    Returns:
+        list: A filtered list of items where 'Date_Added' is older than the specified number of days.
+    """
+    def is_older(item):
+        date_str = item.get('Date_Added')  # Safely get the Date_Added field
+        if date_str:
+            try:
+                date_added = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                cutoff_date = datetime.utcnow() - timedelta(days=days)
+                return date_added < cutoff_date
+            except ValueError:
+                pass  # Invalid date format
+        return False  # Exclude items with invalid or missing dates
+
+    return [item for item in items if is_older(item)]
+    
 def check_if_watch_history_limit_reached(list):
     """
     Checks if the list has 10,000 or more items.
@@ -536,6 +577,8 @@ def check_if_watch_history_limit_reached(list):
     Returns:
         bool: True if the watch history limit has been reached, False otherwise.
     """
+    
+    '''
     # Define the file path for credentials.txt
     here = os.path.abspath(os.path.dirname(__file__))
     file_path = os.path.join(here, 'credentials.txt')
@@ -548,12 +591,18 @@ def check_if_watch_history_limit_reached(list):
     except FileNotFoundError:
         print("Credentials file not found. A new file will be created if needed.", exc_info=True)
         return False  # Return False if the file doesn't exist
+    '''
 
     # Check if list has 10,000 or more items
     if len(list) >= 9999:
+        '''
         # Update sync_watch_history to False
         credentials['sync_watch_history'] = False
+        '''
+        print("WARNING: IMDB watch history has reached the 10,000 limit. New watch history items will be not added to IMDB.")
+        return True  # Return True indicating limit reached and updated the credentials
         
+        '''
         # Mark that the watch history limit has been reached
         try:
             with open(file_path, 'w', encoding='utf-8') as file:
@@ -563,6 +612,7 @@ def check_if_watch_history_limit_reached(list):
         except Exception as e:
             print("Failed to write to credentials file.", exc_info=True)
             return False  # Return False if there was an error while updating the file
+        '''
 
     # Return False if the limit hasn't been reached
     return False
@@ -602,49 +652,6 @@ def check_if_watchlist_limit_reached(list):
             with open(file_path, 'w', encoding='utf-8') as file:
                 json.dump(credentials, file, indent=4, separators=(', ', ': '))
             print("IMDB watchlist has reached the 10,000 item limit. sync_watchlist value set to False. Watchlist will no longer be synced.")
-            return True  # Return True indicating limit reached and updated the credentials
-        except Exception as e:
-            print("Failed to write to credentials file.", exc_info=True)
-            return False  # Return False if there was an error while updating the file
-
-    # Return False if the limit hasn't been reached
-    return False
-    
-def check_if_ratings_limit_reached(list):
-    """
-    Checks if the list has 10,000 or more items.
-    If true, updates the sync_ratings in credentials.txt to False
-    and marks the ratings limit as reached.
-    
-    Args:
-        list (list): List of the user's ratings.
-    
-    Returns:
-        bool: True if the ratings limit has been reached, False otherwise.
-    """
-    # Define the file path for credentials.txt
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
-    
-    # Load the credentials file
-    credentials = {}
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            credentials = json.load(file)
-    except FileNotFoundError:
-        print("Credentials file not found. A new file will be created if needed.", exc_info=True)
-        return False  # Return False if the file doesn't exist
-
-    # Check if list has 10,000 or more items
-    if len(list) >= 9999:
-        # Update sync_ratings to False
-        credentials['sync_ratings'] = False
-        
-        # Mark that the ratings limit has been reached
-        try:
-            with open(file_path, 'w', encoding='utf-8') as file:
-                json.dump(credentials, file, indent=4, separators=(', ', ': '))
-            print("IMDB ratings have reached the 10,000 item limit. sync_ratings value set to False. Ratings will no longer be synced.")
             return True  # Return True indicating limit reached and updated the credentials
         except Exception as e:
             print("Failed to write to credentials file.", exc_info=True)
