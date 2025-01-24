@@ -303,6 +303,7 @@ def main():
             trakt_watch_history, imdb_watch_history, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_watch_history, imdb_watch_history, driver, wait)
             
             '''
+            # Removed temporarily to monitor impact. Most conflicts should be resolved by update_outdated_imdb_ids_from_trakt() function
             # Filter out items that share the same Title, Year and Type, AND have non-matching IMDB_ID values
             trakt_ratings, imdb_ratings = EH.filter_out_mismatched_items(trakt_ratings, imdb_ratings)
             trakt_reviews, imdb_reviews = EH.filter_out_mismatched_items(trakt_reviews, imdb_reviews)
@@ -320,58 +321,18 @@ def main():
             trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
             imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
             
-            # Filter out items already set
-            _imdb_ratings_set = {imdb_rating["IMDB_ID"] for imdb_rating in imdb_ratings}
-            imdb_ratings_to_set = [
-                rating
-                for rating in trakt_ratings
-                if rating["IMDB_ID"] not in _imdb_ratings_set
-            ]
-            _trakt_ratings_set = {trakt_rating["IMDB_ID"] for trakt_rating in trakt_ratings}
-            trakt_ratings_to_set = [
-                rating
-                for rating in imdb_ratings
-                if rating["IMDB_ID"]
-                   not in _trakt_ratings_set
-            ]
-            _imdb_reviews_set = {imdb_review["IMDB_ID"] for imdb_review in imdb_reviews}
-            imdb_reviews_to_set = [
-                review
-                for review in trakt_reviews
-                if review["IMDB_ID"] not in _imdb_reviews_set
-            ]
-            _trakt_reviews_set = {trakt_review["IMDB_ID"] for trakt_review in trakt_reviews}
-            trakt_reviews_to_set = [
-                review
-                for review in imdb_reviews
-                if review["IMDB_ID"]
-                   not in _trakt_reviews_set
-            ]
-            _imdb_watchlist_set = {imdb_item["IMDB_ID"] for imdb_item in imdb_watchlist}
-            imdb_watchlist_to_set = [
-                item
-                for item in trakt_watchlist
-                if item["IMDB_ID"] not in _imdb_watchlist_set
-            ]
-            _trakt_watchlist_set = {trakt_item["IMDB_ID"] for trakt_item in trakt_watchlist}
-            trakt_watchlist_to_set = [
-                item
-                for item in imdb_watchlist
-                if item["IMDB_ID"] not in _trakt_watchlist_set
-            ]
-            _imdb_watch_history_set = {imdb_item["IMDB_ID"] for imdb_item in imdb_watch_history}
-            imdb_watch_history_to_set = [
-                item
-                for item in trakt_watch_history
-                if item["IMDB_ID"] not in _imdb_watch_history_set
-            ]
-            _trakt_watch_history_set = {trakt_item["IMDB_ID"] for trakt_item in trakt_watch_history}
-            trakt_watch_history_to_set = [
-                item
-                for item in imdb_watch_history
-                if item["IMDB_ID"]
-                   not in _trakt_watch_history_set
-            ]
+            # Filter out items already set: Filters items from the target_list that are not already present in the source_list based on key
+            imdb_ratings_to_set = EH.filter_items(imdb_ratings, trakt_ratings, key="IMDB_ID")
+            trakt_ratings_to_set = EH.filter_items(trakt_ratings, imdb_ratings, key="IMDB_ID")
+
+            imdb_reviews_to_set = EH.filter_items(imdb_reviews, trakt_reviews, key="IMDB_ID")
+            trakt_reviews_to_set = EH.filter_items(trakt_reviews, imdb_reviews, key="IMDB_ID")
+
+            imdb_watchlist_to_set = EH.filter_items(imdb_watchlist, trakt_watchlist, key="IMDB_ID")
+            trakt_watchlist_to_set = EH.filter_items(trakt_watchlist, imdb_watchlist, key="IMDB_ID")
+
+            imdb_watch_history_to_set = EH.filter_items(imdb_watch_history, trakt_watch_history, key="IMDB_ID")
+            trakt_watch_history_to_set = EH.filter_items(trakt_watch_history, imdb_watch_history, key="IMDB_ID")
             
             if mark_rated_as_watched_value:
                 # Combine Trakt and IMDB Ratings into one list
