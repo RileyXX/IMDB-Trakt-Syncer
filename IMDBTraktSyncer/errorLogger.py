@@ -4,6 +4,7 @@ import traceback
 import selenium.webdriver
 from logging.handlers import RotatingFileHandler
 
+
 class CustomFormatter(logging.Formatter):
     def formatException(self, exc_info):
         result = super().formatException(exc_info)
@@ -25,22 +26,25 @@ class CustomFormatter(logging.Formatter):
             message = super().format(record)
             return f"{'`' * 100}\n{message}\n{'`' * 100}\n"
 
+
 # Get the directory of the script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
 # Set up the logging configuration
-log_file = os.path.join(script_dir, 'log.txt')
+log_file = os.path.join(script_dir, "log.txt")
 max_file_size = 1024 * 1024  # 1 MB
 backup_count = 0  # Set to 0 for only one log file
 
 # Create a rotating file handler
-handler = RotatingFileHandler(log_file, maxBytes=max_file_size, backupCount=backup_count)
+handler = RotatingFileHandler(
+    log_file, maxBytes=max_file_size, backupCount=backup_count
+)
 handler.setLevel(logging.ERROR)
 
 # Set the log format
-formatter = CustomFormatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = CustomFormatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 
 # Get the root logger and add the handler
-logger = logging.getLogger('')
+logger = logging.getLogger("")
 logger.addHandler(handler)
