@@ -476,6 +476,21 @@ def filter_out_mismatched_items(trakt_list, IMDB_list):
 
     return filtered_trakt_list, filtered_IMDB_list
     
+def filter_items(source_list, target_list, key="IMDB_ID"):
+    """
+    Filters items from the target_list that are not already present in the source_list based on a key.
+
+    Args:
+        source_list (list): The list whose elements are used to filter the target_list.
+        target_list (list): The list to be filtered.
+        key (str): The key to identify unique elements. Defaults to "IMDB_ID".
+
+    Returns:
+        list: A filtered list containing items from the target_list that are not in the source_list.
+    """
+    source_set = {item[key] for item in source_list}
+    return [item for item in target_list if item[key] not in source_set]
+    
 def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imdb_id(combined_watchlist_to_remove, imdb_watchlist_to_set, trakt_watchlist_to_set):
     # Extract IMDB_IDs from the items to remove
     imdb_ids_to_remove = {item['IMDB_ID'] for item in combined_watchlist_to_remove}

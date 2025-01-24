@@ -444,16 +444,18 @@ def prompt_remove_watchlist_items_older_than_x_days():
             remove_watchlist_items_older_than_x_days = credentials.get('remove_watchlist_items_older_than_x_days')
             watchlist_days_to_remove = credentials.get('watchlist_days_to_remove')
 
-            if (
-                remove_watchlist_items_older_than_x_days is not None 
-                and remove_watchlist_items_older_than_x_days != "empty"
-                and watchlist_days_to_remove is not None
+            # If the user has previously configured this, return the stored values
+            if remove_watchlist_items_older_than_x_days is not None and (
+                not remove_watchlist_items_older_than_x_days or watchlist_days_to_remove is not None
             ):
-                return remove_watchlist_items_older_than_x_days, watchlist_days_to_remove  # Return stored values if they exist
+                return remove_watchlist_items_older_than_x_days, watchlist_days_to_remove
     except FileNotFoundError:
-        # Log the error if the file is missing but continue execution
         print("Credentials file not found. A new one will be created.")
         credentials = {}
+
+    # Initialize variables
+    remove_watchlist_items_older_than_x_days = None
+    watchlist_days_to_remove = None
 
     # Prompt the user for input until a valid choice is made
     while True:
@@ -470,7 +472,6 @@ def prompt_remove_watchlist_items_older_than_x_days():
             break
         elif user_input == 'n':
             remove_watchlist_items_older_than_x_days = False
-            watchlist_days_to_remove = None
             break
         else:
             print("Invalid input. Please enter 'y' or 'n'.")
@@ -486,10 +487,10 @@ def prompt_remove_watchlist_items_older_than_x_days():
             except ValueError:
                 print("Invalid input. Please enter a valid number.")
 
-    # Save the user's choice and the number of days to the credentials file
+    # Save the user's choice and the number of days only if both are valid
     credentials['remove_watchlist_items_older_than_x_days'] = remove_watchlist_items_older_than_x_days
-    credentials['watchlist_days_to_remove'] = watchlist_days_to_remove
-    
+    credentials['watchlist_days_to_remove'] = watchlist_days_to_remove if remove_watchlist_items_older_than_x_days else None
+
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
             json.dump(credentials, file, indent=4, separators=(', ', ': '))
