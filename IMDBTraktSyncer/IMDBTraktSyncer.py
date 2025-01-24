@@ -321,14 +321,57 @@ def main():
             imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
             
             # Filter out items already set
-            imdb_ratings_to_set = [rating for rating in trakt_ratings if rating['IMDB_ID'] not in [imdb_rating['IMDB_ID'] for imdb_rating in imdb_ratings]]
-            trakt_ratings_to_set = [rating for rating in imdb_ratings if rating['IMDB_ID'] not in [trakt_rating['IMDB_ID'] for trakt_rating in trakt_ratings]]
-            imdb_reviews_to_set = [review for review in trakt_reviews if review['IMDB_ID'] not in [imdb_review['IMDB_ID'] for imdb_review in imdb_reviews]]
-            trakt_reviews_to_set = [review for review in imdb_reviews if review['IMDB_ID'] not in [trakt_review['IMDB_ID'] for trakt_review in trakt_reviews]]
-            imdb_watchlist_to_set = [item for item in trakt_watchlist if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watchlist]]
-            trakt_watchlist_to_set = [item for item in imdb_watchlist if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watchlist]]
-            imdb_watch_history_to_set = [item for item in trakt_watch_history if item['IMDB_ID'] not in [imdb_item['IMDB_ID'] for imdb_item in imdb_watch_history]]
-            trakt_watch_history_to_set = [item for item in imdb_watch_history if item['IMDB_ID'] not in [trakt_item['IMDB_ID'] for trakt_item in trakt_watch_history]]
+            _imdb_ratings_set = {imdb_rating["IMDB_ID"] for imdb_rating in imdb_ratings}
+            imdb_ratings_to_set = [
+                rating
+                for rating in trakt_ratings
+                if rating["IMDB_ID"] not in _imdb_ratings_set
+            ]
+            _trakt_ratings_set = {trakt_rating["IMDB_ID"] for trakt_rating in trakt_ratings}
+            trakt_ratings_to_set = [
+                rating
+                for rating in imdb_ratings
+                if rating["IMDB_ID"]
+                   not in _trakt_ratings_set
+            ]
+            _imdb_reviews_set = {imdb_review["IMDB_ID"] for imdb_review in imdb_reviews}
+            imdb_reviews_to_set = [
+                review
+                for review in trakt_reviews
+                if review["IMDB_ID"] not in _imdb_reviews_set
+            ]
+            _trakt_reviews_set = {trakt_review["IMDB_ID"] for trakt_review in trakt_reviews}
+            trakt_reviews_to_set = [
+                review
+                for review in imdb_reviews
+                if review["IMDB_ID"]
+                   not in _trakt_reviews_set
+            ]
+            _imdb_watchlist_set = {imdb_item["IMDB_ID"] for imdb_item in imdb_watchlist}
+            imdb_watchlist_to_set = [
+                item
+                for item in trakt_watchlist
+                if item["IMDB_ID"] not in _imdb_watchlist_set
+            ]
+            _trakt_watchlist_set = {trakt_item["IMDB_ID"] for trakt_item in trakt_watchlist}
+            trakt_watchlist_to_set = [
+                item
+                for item in imdb_watchlist
+                if item["IMDB_ID"] not in _trakt_watchlist_set
+            ]
+            _imdb_watch_history_set = {imdb_item["IMDB_ID"] for imdb_item in imdb_watch_history}
+            imdb_watch_history_to_set = [
+                item
+                for item in trakt_watch_history
+                if item["IMDB_ID"] not in _imdb_watch_history_set
+            ]
+            _trakt_watch_history_set = {trakt_item["IMDB_ID"] for trakt_item in trakt_watch_history}
+            trakt_watch_history_to_set = [
+                item
+                for item in imdb_watch_history
+                if item["IMDB_ID"]
+                   not in _trakt_watch_history_set
+            ]
             
             if mark_rated_as_watched_value:
                 # Combine Trakt and IMDB Ratings into one list
