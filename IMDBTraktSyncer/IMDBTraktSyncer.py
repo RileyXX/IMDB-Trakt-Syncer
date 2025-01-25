@@ -276,22 +276,22 @@ def main():
             driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             driver, wait = imdbData.download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             if sync_watchlist_value or remove_watched_from_watchlists_value:
-                imdb_watchlist, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
+                imdb_watchlist, imdb_watchlist_size, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
             if sync_ratings_value or mark_rated_as_watched_value:
                 imdb_ratings, driver, wait = imdbData.get_imdb_ratings(driver, wait, directory)
             if sync_reviews_value:
                 imdb_reviews, errors_found_getting_imdb_reviews, driver, wait = imdbData.get_imdb_reviews(driver, wait, directory)
             if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
-                imdb_watch_history, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
+                imdb_watch_history, imdb_watch_history_size, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
             print('Processing IMDB Data Complete')
                         
             if sync_watchlist_value:
                 # Check if IMDB watchlist has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
-                imdb_watchlist_limit_reached = EH.check_if_watchlist_limit_reached(imdb_watchlist)
+                imdb_watchlist_limit_reached = EH.check_if_watchlist_limit_reached(imdb_watchlist_size)
                               
             if sync_watch_history_value or mark_rated_as_watched_value:
                 # Check if IMDB watch history has reached the 10,000 item limit. If limit is reached, disable syncing watch history.
-                imdb_watch_history_limit_reached = EH.check_if_watch_history_limit_reached(imdb_watch_history)
+                imdb_watch_history_limit_reached = EH.check_if_watch_history_limit_reached(imdb_watch_history_size)
             
             # Remove duplicates from Trakt watch_history
             trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
