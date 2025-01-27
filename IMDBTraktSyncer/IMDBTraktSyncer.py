@@ -937,7 +937,7 @@ def main():
                             data = {
                                 "shows": [{
                                     "ids": {
-                                        "trakt": item["TraktID"]
+                                        "imdb": item["IMDB_ID"]
                                     }
                                 }]
                             }
@@ -946,7 +946,7 @@ def main():
                             data = {
                                 "movies": [{
                                     "ids": {
-                                        "trakt": item["TraktID"]
+                                        "imdb": item["IMDB_ID"]
                                     }
                                 }]
                             }
@@ -956,7 +956,7 @@ def main():
                             data = {
                                 "episodes": [{
                                     "ids": {
-                                        "trakt": item["TraktID"]
+                                        "imdb": item["IMDB_ID"]
                                     }
                                 }]
                             }
