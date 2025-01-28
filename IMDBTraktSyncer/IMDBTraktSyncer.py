@@ -295,6 +295,16 @@ def main():
             
             # Remove duplicates from Trakt watch_history
             trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
+            
+            # Get trakt and imdb data and filter out items with missing imdb id
+            trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
+            imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
+            trakt_reviews = [review for review in trakt_reviews if review.get('IMDB_ID') is not None]
+            imdb_reviews = [review for review in imdb_reviews if review.get('IMDB_ID') is not None]
+            trakt_watchlist = [item for item in trakt_watchlist if item.get('IMDB_ID') is not None]
+            imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
+            trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
+            imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
                        
             # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
             trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
@@ -310,16 +320,6 @@ def main():
             trakt_watchlist, imdb_watchlist = EH.filter_out_mismatched_items(trakt_watchlist, imdb_watchlist)
             trakt_watch_history, imdb_watch_history = EH.filter_out_mismatched_items(trakt_watch_history, imdb_watch_history)
             '''
-                                  
-            # Get trakt and imdb data and filter out items with missing imdb id
-            trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
-            imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
-            trakt_reviews = [review for review in trakt_reviews if review.get('IMDB_ID') is not None]
-            imdb_reviews = [review for review in imdb_reviews if review.get('IMDB_ID') is not None]
-            trakt_watchlist = [item for item in trakt_watchlist if item.get('IMDB_ID') is not None]
-            imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
-            trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
-            imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
             
             # Filter out items already set: Filters items from the target_list that are not already present in the source_list based on key
             imdb_ratings_to_set = EH.filter_items(imdb_ratings, trakt_ratings, key="IMDB_ID")
