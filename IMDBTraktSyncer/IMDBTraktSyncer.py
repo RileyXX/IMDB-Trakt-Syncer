@@ -33,7 +33,7 @@ def main():
     
     args = parser.parse_args()
 
-    main_directory = os.getenv("IMDB_TRACK_SYNCER_DIRECTORY")
+    main_directory = os.getenv("IMDB_TRAKT_SYNCER_DIRECTORY")
     if not main_directory:
         main_directory = os.path.dirname(os.path.realpath(__file__))
 
