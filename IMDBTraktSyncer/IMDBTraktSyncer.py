@@ -32,8 +32,10 @@ def main():
     parser.add_argument("--directory", action="store_true", help="Prints the package install directory.")
     
     args = parser.parse_args()
-    
-    main_directory = os.path.dirname(os.path.realpath(__file__))
+
+    main_directory = os.getenv("IMDB_TRACK_SYNCER_DIRECTORY")
+    if not main_directory:
+        main_directory = os.path.dirname(os.path.realpath(__file__))
 
     if args.clear_user_data:
         arguments.clear_user_data(main_directory)
