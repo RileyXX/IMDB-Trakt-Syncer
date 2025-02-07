@@ -1,41 +1,47 @@
 import requests
 import time
 import sys
+import datetime
+from datetime import timedelta, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
 from IMDBTraktSyncer import errorLogger as EL
 
 def authenticate(client_id, client_secret, refresh_token=None):
-    CLIENT_ID = client_id
-    CLIENT_SECRET = client_secret
 
-    REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob'
+    redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
 
     if refresh_token:
         # If a refresh token is provided, use it to get a new access token
         data = {
             'refresh_token': refresh_token,
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'redirect_uri': REDIRECT_URI,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
             'grant_type': 'refresh_token'
         }
         headers = {
             'Content-Type': 'application/json',
         }
-
+        
         # Use make_trakt_request for the POST request
         response = EH.make_trakt_request('https://api.trakt.tv/oauth/token', headers=headers, payload=data)
 
         if response:
             json_data = response.json()
-            ACCESS_TOKEN = json_data['access_token']
-            REFRESH_TOKEN = json_data['refresh_token']
-            return ACCESS_TOKEN, REFRESH_TOKEN
+            access_token = json_data['access_token']
+            refresh_token = json_data['refresh_token']
+            expires_in = json_data['expires_in']
+            
+            # Calculate the exact expiration time and subtract 120 seconds buffer
+            expiration_time = datetime.datetime.now(timezone.utc) + timedelta(seconds=expires_in - 120)
+            expiration_time = expiration_time.replace(tzinfo=timezone.utc).isoformat()
+            
+            return access_token, refresh_token, expiration_time
         else:
             # empty response, invalid refresh token, prompt user to re-authenticate
-            return authenticate(CLIENT_ID, CLIENT_SECRET)
+            return authenticate(client_id, client_secret)
 
     else:
         # Set up the authorization endpoint URL
@@ -44,8 +50,8 @@ def authenticate(client_id, client_secret, refresh_token=None):
         # Construct the authorization URL with the necessary parameters
         params = {
             'response_type': 'code',
-            'client_id': CLIENT_ID,
-            'redirect_uri': REDIRECT_URI,
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
         }
         auth_url += '?' + '&'.join([f'{key}={value}' for key, value in params.items()])
         
@@ -61,9 +67,9 @@ def authenticate(client_id, client_secret, refresh_token=None):
         # Set up the access token request
         data = {
             'code': authorization_code,
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'redirect_uri': REDIRECT_URI,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
             'grant_type': 'authorization_code'
         }
         headers = {
@@ -76,16 +82,17 @@ def authenticate(client_id, client_secret, refresh_token=None):
         if response:
             # Parse the JSON response from the API
             json_data = response.json()
-
-            # Extract the access token from the response
-            ACCESS_TOKEN = json_data['access_token']
-
-            # Extract the refresh token from the response
-            REFRESH_TOKEN = json_data['refresh_token']
+            access_token = json_data['access_token']
+            refresh_token = json_data['refresh_token']
+            expires_in = json_data['expires_in']
             
-            return ACCESS_TOKEN, REFRESH_TOKEN
+            # Calculate the exact expiration time and subtract 120 seconds buffer
+            expiration_time = datetime.datetime.now(timezone.utc) + timedelta(seconds=expires_in - 120)
+            expiration_time = expiration_time.replace(tzinfo=timezone.utc).isoformat()
+            
+            return access_token, refresh_token, expiration_time
         else:
             # empty response, invalid refresh token, prompt user to re-authenticate
-            return authenticate(CLIENT_ID, CLIENT_SECRET)
+            return authenticate(client_id, client_secret)
 
     return None
