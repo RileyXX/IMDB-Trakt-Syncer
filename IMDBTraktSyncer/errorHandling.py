@@ -38,7 +38,7 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
-    
+
     # Set default headers if none are provided
     if headers is None:
         # Get credentials
@@ -54,7 +54,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
     retry_delay = 1  # Initial delay between retries (in seconds)
     retry_attempts = 0  # Count of retry attempts made
     connection_timeout = 20  # Timeout for requests (in seconds)
-    total_wait_time = sum(retry_delay * (2 ** i) for i in range(max_retries))  # Total possible wait time
+    total_wait_time = sum(1 * (2 ** i) for i in range(max_retries))  # Total possible wait time
 
     # Retry loop to handle network errors or server overload scenarios
     while retry_attempts < max_retries:
@@ -83,7 +83,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
                 # Respect the 'Retry-After' header if provided, otherwise use default delay
                 retry_after = int(response.headers.get('Retry-After', retry_delay))
                 if response.status_code != 429:
-                    remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+                    remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
                     print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
                           f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
                     EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
@@ -103,7 +103,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
         # Handle Network errors (connection issues, timeouts, SSL, etc.)
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
             retry_attempts += 1  # Increment retry counter
-            remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+            remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
             print(f" - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
                   f"Time remaining: {remaining_time}s")
             EL.logger.warning(f"Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
@@ -153,13 +153,10 @@ def get_trakt_message(status_code):
     return error_messages.get(status_code, "Unknown error")
 
 def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_time=5):
-    num_retries = total_wait_time // initial_wait_time
-    wait_time = total_wait_time / num_retries
-    max_retries = num_retries
+    total_time_spent = 0  # Track total elapsed time
     status_code = None
-    total_time_spent = 0  # Track total time spent across retries
 
-    for retry in range(max_retries):
+    while total_time_spent < total_wait_time:
         try:
             start_time = time.time()  # Track time taken for each retry attempt
             
@@ -201,8 +198,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                     print("   - Total wait time exceeded. Aborting.")
                     return False, None, url, driver, wait
 
-                print(f"   - Remaining time for retries: {int(total_wait_time - total_time_spent)} seconds.")
-                time.sleep(wait_time)
+                remaining_time = total_wait_time - total_time_spent
+                print(f"   - Remaining time for retries: {int(remaining_time)} seconds.")
+                time.sleep(min(remaining_time, initial_wait_time))
                 continue
 
             elif status_code >= 400:
@@ -225,8 +223,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 print("   - Total wait time exceeded. Aborting after timeout.")
                 return False, None, url, driver, wait
 
-            print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {int(total_wait_time - total_time_spent)}s")
-            time.sleep(wait_time)
+            remaining_time = total_wait_time - total_time_spent
+            print(f"   - Retrying... Time Remaining: {int(remaining_time)}s")
+            time.sleep(min(remaining_time, initial_wait_time))
             continue
 
         except WebDriverException as e:
@@ -257,8 +256,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                     print("   - Total wait time exceeded. Aborting after WebDriver error.")
                     return False, None, url, driver, wait
 
-                print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
-                time.sleep(wait_time)
+                remaining_time = total_wait_time - total_time_spent
+                print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(remaining_time)}s")
+                time.sleep(min(remaining_time, initial_wait_time))
                 continue
 
             else:
@@ -281,8 +281,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                     print("   - Total wait time exceeded. Aborting after page load exception.")
                     return False, None, url, driver, wait
 
-                print(f"   - Retryable error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
-                time.sleep(wait_time)
+                remaining_time = total_wait_time - total_time_spent
+                print(f"   - Retryable error detected. Retrying... Time Remaining: {int(remaining_time)}s")
+                time.sleep(min(remaining_time, initial_wait_time))
                 continue
 
             else:
@@ -329,9 +330,19 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
 
             # Handle retryable HTTP status codes (rate limits or server errors)
             if response.status_code in [429, 500, 502, 503, 504]:
-                retry_after = int(response.headers.get("Retry-After", retry_delay))
+                retry_after = response.headers.get("Retry-After")
+
+                if retry_after:
+                    try:
+                        retry_after = int(retry_after)  # If it's a number, use it as seconds
+                    except ValueError:
+                        retry_after = retry_delay  # If it's not a number, default back to exponential delay
+                else:
+                    retry_after = retry_delay  # Default exponential backoff if no header is provided
+                
                 print(f"Server error {response.status_code}. Retrying in {retry_after} seconds...")
-                time.sleep(retry_after)
+                time.sleep(retry_after)  # Wait before retrying
+                
                 retry_delay *= 2  # Exponential backoff
                 retry_attempts += 1
             else:
@@ -343,7 +354,7 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
             # Handle network-related errors
             retry_attempts += 1
             print(f"Network error: {network_err}. Retrying in {retry_delay} seconds... (Attempt {retry_attempts}/{max_retries})")
-            time.sleep(retry_delay)
+            time.sleep(retry_delay)  # Wait before retrying
             retry_delay *= 2  # Exponential backoff
 
         except RequestException as req_err:
