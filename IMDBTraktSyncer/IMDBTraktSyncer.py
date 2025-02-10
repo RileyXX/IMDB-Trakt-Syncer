@@ -854,7 +854,7 @@ def main():
                     # Set IMDB Reviews
                     if imdb_reviews_to_set:
                         # Call the check_last_run() function
-                        if check_imdb_reviews_last_submitted():
+                        if VC.check_imdb_reviews_last_submitted():
                             print('Setting IMDB Reviews')
                             
                             # Count the total number of items

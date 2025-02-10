@@ -67,7 +67,7 @@ def prompt_get_credentials():
     if trakt_token_expires != "empty":
         try:
             expiration_time = datetime.datetime.fromisoformat(trakt_token_expires).replace(tzinfo=timezone.utc)
-            if datetime.datetime.now(timezone.utc).replace(tzinfo=timezone.utc) < expiration_time:
+            if datetime.datetime.now(timezone.utc) < expiration_time:
                 should_refresh = False
         except ValueError:
             pass  # Invalid date format, force refresh
