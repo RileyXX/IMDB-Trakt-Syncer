@@ -749,10 +749,10 @@ def main():
                                         print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
                                         
                                     else:
-                                        error_message1 = f' - Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
-                                        error_message2 = f"   - Rating already exists on IMDB for this {item['Type']}. Rating: ({item['Rating']})"
-                                        EL.logger.error(error_message1)
-                                        EL.logger.error(error_message2)
+                                        info_message = f"   - Rating already exists on IMDB for {item['Type']}: {item['Title']} ({item['Year']}). Skipping..."
+                                        print(info_message)
+                                        EL.logger.info(info_message)
+                                        continue
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 
@@ -1232,10 +1232,10 @@ def main():
                                         print(f" - {error_message}")
                                         EL.logger.error(error_message)
                                 else:
-                                    error_message1 = f" - Failed to add {item['Type']} ({item_count} of {num_items}): {episode_title}{item['Title']}{year_str} to IMDB Watch History ({item['IMDB_ID']})"
-                                    error_message2 = f"   - {item['Type'].capitalize()} already exists in IMDB watch history."
-                                    EL.logger.error(error_message1)
-                                    EL.logger.error(error_message2)
+                                    info_message = f"   - {item['Type'].capitalize()} already exists in IMDB watch history: {item['Title']} ({item['Year']}). Skipping..."
+                                    print(info_message)
+                                    EL.logger.info(info_message)
+                                    continue
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 error_message1 = f"IMDB reference view setting is enabled. Adding items to IMDB Check-ins is not supported. See: https://www.imdb.com/preferences/general"
