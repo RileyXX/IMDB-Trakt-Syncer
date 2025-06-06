@@ -1,18 +1,11 @@
 import os
 import time
 import csv
-import requests
 import traceback
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -32,9 +25,16 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
-        export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-        export_button.click()
-        time.sleep(3)
+        try:
+            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            # Scroll into view and click the button
+            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+            wait.until(EC.visibility_of(export_button))
+            driver.execute_script("arguments[0].click();", export_button)
+            time.sleep(3)
+        except TimeoutException:
+            # print("Export button not found, possibly because the list is empty.")
+            pass
     
     # Generate ratings export if sync_ratings_value is True
     if sync_ratings_value or mark_rated_as_watched_value:
@@ -42,10 +42,16 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
         if not success:
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
-
-        export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-        export_button.click()
-        time.sleep(3)
+        try:
+            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            # Scroll into view and click the button
+            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+            wait.until(EC.visibility_of(export_button))
+            driver.execute_script("arguments[0].click();", export_button)
+            time.sleep(3)
+        except TimeoutException:
+            # print("Export button not found, possibly because the list is empty.")
+            pass
     
     # Generate checkins export if sync_watch_history_value is True
     if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
@@ -54,9 +60,15 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
-        export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-        export_button.click()
-        time.sleep(3)
+        try:
+            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
+            wait.until(EC.visibility_of(export_button))
+            driver.execute_script("arguments[0].click();", export_button)
+            time.sleep(3)
+        except TimeoutException:
+            # print("Export button not found, possibly because the list is empty.")
+            pass
     
     # Wait for export processing to finish
     # Function to check if any summary item contains "in progress"
@@ -117,16 +129,23 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
         # Page failed to load, raise an exception
         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
-    # Locate all elements with the selector
-    summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
+    # Locate all export blocks
+    try:
+        summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
+    except Exception:
+        raise Exception("Failed to locate export summary items.")
 
     # Helper function to find buttons for CSV downloads
     def find_button(item_text):
         for item in summary_items:
             if item_text.lower() in item.text.lower():
-                button = item.find_element(By.CSS_SELECTOR, "button[data-testid*='export-status-button']")
-                if button:
+                try:
+                    button = item.find_element(By.CSS_SELECTOR, "button[data-testid*='export-status-button']")
                     return button
+                except Exception:
+                    print(f"Export button not found for '{item_text}' on IMDB exports page https://www.imdb.com/exports/")
+                    return None
+        print(f"No section found matching '{item_text}' on IMDB exports page https://www.imdb.com/exports/")
         return None
 
     # Find download buttons
@@ -148,24 +167,26 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     
     for csv_link, file_name in file_mappings:
         if csv_link:
-            # Scroll into view and click the button
-            driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
-            wait.until(EC.visibility_of(csv_link))
-            driver.execute_script("arguments[0].click();", csv_link)
-            
-            # Wait for download to complete
-            time.sleep(10)
+            try:
+                driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
+                wait.until(EC.visibility_of(csv_link))
+                driver.execute_script("arguments[0].click();", csv_link)
+                time.sleep(10)  # wait for download to complete
 
-            # Find the most recent file in the directory
-            downloaded_files = sorted(
-                [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.csv')],
-                key=os.path.getmtime,
-                reverse=True
-            )
-            if downloaded_files:
-                grant_permissions_and_rename_file(downloaded_files[0], file_name)
-            else:
-                print(f"Unable to locate downloaded file for {file_name}")
+                downloaded_files = sorted(
+                    [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.csv')],
+                    key=os.path.getmtime,
+                    reverse=True
+                )
+
+                if downloaded_files:
+                    grant_permissions_and_rename_file(downloaded_files[0], file_name)
+                else:
+                    print(f"Unable to locate downloaded file for {file_name}")
+            except Exception as e:
+                print(f"Failed to download or rename file '{file_name}': {str(e)}")
+        else:
+            print(f"No export button found for '{file_name}', skipping...")
 
     return driver, wait
 
@@ -225,10 +246,15 @@ def get_imdb_watchlist(driver, wait, directory):
             os.remove(watchlist_path)
         
     except FileNotFoundError as e:
+        error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
+        print(error_message)
+        EL.logger.error(error_message, exc_info=True)
+        """
         error_message = str(e)
         print(f"Error: {error_message}")
         traceback.print_exc()
         EL.logger.error(error_message, exc_info=True)
+        """
     
     except (NoSuchElementException, TimeoutException):
         # No IMDB Watchlist Items
@@ -298,10 +324,15 @@ def get_imdb_ratings(driver, wait, directory):
             os.remove(ratings_path)
         
     except FileNotFoundError as e:
+        error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
+        print(error_message)
+        EL.logger.error(error_message, exc_info=True)
+        """
         error_message = str(e)
         print(f"Error: {error_message}")
         traceback.print_exc()
         EL.logger.error(error_message, exc_info=True)
+        """
     
     except (NoSuchElementException, TimeoutException):
         # No IMDB Ratings Items
@@ -367,10 +398,15 @@ def get_imdb_checkins(driver, wait, directory):
             os.remove(checkins_path)
         
     except FileNotFoundError as e:
+        error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
+        print(error_message)
+        EL.logger.error(error_message, exc_info=True)
+        """
         error_message = str(e)
         print(f"Error: {error_message}")
         traceback.print_exc()
         EL.logger.error(error_message, exc_info=True)
+        """
     
     except (NoSuchElementException, TimeoutException):
         # No IMDB Check-in Items
@@ -454,7 +490,10 @@ def get_imdb_reviews(driver, wait, directory):
                     current_url = driver.current_url
                     
                     # Click the "Next" link
-                    next_link.click()
+                    # Scroll into view and click the button
+                    driver.execute_script("arguments[0].scrollIntoView(true);", next_link)
+                    wait.until(EC.visibility_of(next_link))
+                    driver.execute_script("arguments[0].click();", next_link)
 
                     # Wait until the URL changes
                     wait.until(lambda driver: driver.current_url != current_url)

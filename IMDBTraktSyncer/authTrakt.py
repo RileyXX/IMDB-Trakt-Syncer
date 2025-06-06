@@ -1,5 +1,3 @@
-import requests
-import time
 import sys
 import datetime
 from datetime import timedelta, timezone
