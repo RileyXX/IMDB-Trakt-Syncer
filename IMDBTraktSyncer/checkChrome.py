@@ -1,5 +1,4 @@
 import os
-import requests
 import zipfile
 import shutil
 import platform
@@ -7,10 +6,8 @@ import sys
 import time
 import subprocess
 import stat
+from requests.exceptions import RequestException
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
 

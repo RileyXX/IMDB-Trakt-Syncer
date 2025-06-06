@@ -1,21 +1,16 @@
 import os
-import json
-import requests
 import time
 import sys
 import argparse
 import subprocess
-import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import arguments
@@ -167,7 +162,7 @@ def main():
                 # wait for sign in link to appear and then click it
                 sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
                 if 'IMDb' in sign_in_link.text:
-                    sign_in_link.click()
+                    driver.execute_script("arguments[0].click();", sign_in_link)
 
                 # wait for email input field and password input field to appear, then enter credentials and submit
                 email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
@@ -175,7 +170,7 @@ def main():
                 email_input.send_keys(imdb_username)
                 password_input.send_keys(imdb_password)
                 submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
-                submit_button.click()
+                driver.execute_script("arguments[0].click();", submit_button)
 
                 time.sleep(2)
 
@@ -729,7 +724,8 @@ def main():
                                 # driver.execute_script("arguments[0].scrollIntoView(true);", button)
 
                                 # click on "Rate" button and select rating option, then submit rating
-                                button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
+                                locator = (By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')
+                                button = wait.until(lambda d: (lambda el: el if el.get_attribute("aria-disabled") == "false" else False)(d.find_element(*locator)))
                                 element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"]')
                                 if element_rating_bar:
                                     try:
@@ -743,7 +739,7 @@ def main():
                                         rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
                                         driver.execute_script("arguments[0].click();", rating_option_element)
                                         submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                                        submit_element.click()
+                                        driver.execute_script("arguments[0].click();", submit_element)
                                         time.sleep(1)
                                         
                                         print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
@@ -882,23 +878,23 @@ def main():
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                                     
-                                    review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
-                                    review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
+                                    review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#text-input__0")))
+                                    review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#textarea__0")))
                                     
                                     review_title_input.send_keys("My Review")
                                     review_input.send_keys(item["Comment"])
                                     
-                                    no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
-                                    yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                                    no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#is_spoiler-1")))
+                                    yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#is_spoiler-0")))
                                     
                                     if item["Spoiler"]:
-                                        yes_element.click()                        
+                                        driver.execute_script("arguments[0].click();", yes_element)                                        
                                     else:
-                                        no_element.click()
+                                        driver.execute_script("arguments[0].click();", no_element)
                                                             
-                                    submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+                                    submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[aria-label='Submit']")))
 
-                                    submit_button.click()
+                                    driver.execute_script("arguments[0].click();", submit_button)
                                     
                                     time.sleep(3) # wait for rating to submit
                                 except (NoSuchElementException, TimeoutException, PageLoadException):
@@ -1209,9 +1205,9 @@ def main():
                                 
                                 driver.execute_script("arguments[0].click();", watch_history_button)
                                 
-                                watch_history_button = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                watch_history_button = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Your check-ins')]")))
                                 
-                                watch_history_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                watch_history_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Your check-ins')]")))
                                                                 
                                 # Check if item is already in watch history otherwise skip it
                                 if 'true' not in watch_history_button.get_attribute('data-titleinlist'):

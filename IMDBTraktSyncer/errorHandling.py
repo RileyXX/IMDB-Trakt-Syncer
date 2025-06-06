@@ -7,14 +7,7 @@ import inspect
 import json
 import re
 from datetime import datetime, timedelta
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import WebDriverException, NoSuchElementException, TimeoutException, StaleElementReferenceException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -71,34 +64,42 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             else:
                 # POST request with JSON payload
                 response = requests.post(url, headers=headers, json=payload, timeout=connection_timeout)
-
-            # If request is successful, return the response
-            if response.status_code in [200, 201, 204]:
-                return response
             
-            # Handle retryable server errors and rate limit exceeded
-            elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
-                retry_attempts += 1  # Increment retry counter
+            if response is not None:
+                # If request is successful, return the response
+                if response.status_code in [200, 201, 204]:
+                    return response
+                
+                # Handle retryable server errors and rate limit exceeded
+                elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
+                    retry_attempts += 1  # Increment retry counter
 
-                # Respect the 'Retry-After' header if provided, otherwise use default delay
-                retry_after = int(response.headers.get('Retry-After', retry_delay))
-                if response.status_code != 429:
-                    remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
-                    print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
-                          f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
-                    EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
-                                      f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                    # Respect the 'Retry-After' header if provided, otherwise use default delay
+                    retry_after = int(response.headers.get('Retry-After', retry_delay))
+                    if response.status_code != 429:
+                        remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
+                        print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
+                              f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                        EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
+                                          f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
 
-                time.sleep(retry_after)  # Wait before retrying
-                retry_delay *= 2  # Apply exponential backoff for retries
-            
+                    time.sleep(retry_after)  # Wait before retrying
+                    retry_delay *= 2  # Apply exponential backoff for retries
+                
+                else:
+                    # Handle non-retryable HTTP status codes
+                    status_message = get_trakt_message(response.status_code)
+                    error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                    print(f" - {error_message}")
+                    EL.logger.error(f"{error_message}. URL: {url}")
+                    return response  # Exit with failure for non-retryable errors
             else:
-                # Handle non-retryable HTTP status codes
-                status_message = get_trakt_message(response.status_code)
-                error_message = f"Request failed with status code {response.status_code}: {status_message}"
-                print(f" - {error_message}")
-                EL.logger.error(f"{error_message}. URL: {url}")
-                return response  # Exit with failure for non-retryable errors
+                # Failsafe in case response is still None for any unexpected reason
+                retry_attempts += 1
+                print(f" - No response received. Retrying... ({retry_attempts}/{max_retries})")
+                EL.logger.warning(f"No response received. Retrying... ({retry_attempts}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_delay *= 2
 
         # Handle Network errors (connection issues, timeouts, SSL, etc.)
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
@@ -204,7 +205,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 continue
 
             elif status_code >= 400:
-                raise PageLoadException(f'Failed to load page. Status code: {status_code}. URL: {url}')
+                return False, status_code, url, driver, wait
 
             else:
                 # Page loaded successfully
@@ -518,15 +519,28 @@ def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imd
 
     return imdb_watchlist_to_set, trakt_watchlist_to_set
     
-# Function to remove duplicates based on IMDB_ID
+# Function to remove duplicates based on IMDB_ID, keeping the older one based on Date_Added
 def remove_duplicates_by_imdb_id(watched_content):
-    seen = set()
-    unique_content = []
+    seen = {}
     for item in watched_content:
-        if item['IMDB_ID'] not in seen:
-            unique_content.append(item)
-            seen.add(item['IMDB_ID'])
-    return unique_content
+        imdb_id = item['IMDB_ID']
+        date_added = item.get('Date_Added')
+
+        if date_added:
+            date_added = datetime.strptime(date_added, '%Y-%m-%dT%H:%M:%S.000Z')
+        
+        if imdb_id not in seen:
+            seen[imdb_id] = item
+        else:
+            existing_date = seen[imdb_id].get('Date_Added')
+            if existing_date:
+                existing_date = datetime.strptime(existing_date, '%Y-%m-%dT%H:%M:%S.000Z')
+                if date_added and date_added < existing_date:
+                    seen[imdb_id] = item
+            elif not date_added:
+                continue  # Keep the first one encountered when no Date_Added is available
+
+    return list(seen.values())
     
 # Function to remove items with Type 'show'
 def remove_shows(watched_content):

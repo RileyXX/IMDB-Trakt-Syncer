@@ -1,8 +1,5 @@
 import os
 import logging
-import traceback
-import selenium.webdriver
-from logging.handlers import RotatingFileHandler
 
 class CustomFormatter(logging.Formatter):
     def formatException(self, exc_info):
@@ -11,36 +8,48 @@ class CustomFormatter(logging.Formatter):
 
     def format(self, record):
         if record.exc_info:
-            # Save the original exc_info and set it to None
             exc_info = record.exc_info
             record.exc_info = None
-            # Format the log message without the traceback
             message = super().format(record)
-            # Restore the original exc_info
             record.exc_info = exc_info
-            # Add the traceback to the log message
             traceback_message = self.formatException(record.exc_info)
             return f"{'`' * 100}\n{message}\n{traceback_message}\n{'`' * 100}\n"
         else:
             message = super().format(record)
             return f"{'`' * 100}\n{message}\n{'`' * 100}\n"
 
+class PrependFileHandler(logging.Handler):
+    def __init__(self, filename):
+        super().__init__()
+        self.filename = filename
+
+    def emit(self, record):
+        try:
+            log_entry = self.format(record) + "\n"
+            if os.path.exists(self.filename):
+                with open(self.filename, "r+", encoding="utf-8") as file:
+                    old_content = file.read()
+                    file.seek(0)
+                    file.write(log_entry + old_content)
+            else:
+                with open(self.filename, "w", encoding="utf-8") as file:
+                    file.write(log_entry)
+        except Exception:
+            print("Error writing log.")
+
 # Get the directory of the script
 script_dir = os.path.dirname(os.path.abspath(__file__))
+log_file = os.path.join(script_dir, "log.txt")
 
-# Set up the logging configuration
-log_file = os.path.join(script_dir, 'log.txt')
-max_file_size = 1024 * 1024  # 1 MB
-backup_count = 0  # Set to 0 for only one log file
-
-# Create a rotating file handler
-handler = RotatingFileHandler(log_file, maxBytes=max_file_size, backupCount=backup_count)
+# Create a custom file handler for prepending logs
+handler = PrependFileHandler(log_file)
 handler.setLevel(logging.ERROR)
 
 # Set the log format
-formatter = CustomFormatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = CustomFormatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 
 # Get the root logger and add the handler
-logger = logging.getLogger('')
+logger = logging.getLogger("")
+logger.setLevel(logging.ERROR)
 logger.addHandler(handler)

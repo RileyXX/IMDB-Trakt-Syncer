@@ -1,8 +1,5 @@
 import json
-import requests
-import time
 import urllib.parse
-from urllib.parse import urljoin
 import datetime
 import sys
 from pathlib import Path
