@@ -95,7 +95,7 @@ def main():
             options.add_argument(f"--user-data-dir={user_data_directory}")
             if headless == True:
                 options.add_argument("--headless=new")
-            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
                 "download.directory_upgrade": True,
@@ -722,33 +722,37 @@ def main():
                                 # Wait until rate button is located and scroll to it
                                 button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                                 # driver.execute_script("arguments[0].scrollIntoView(true);", button)
-
+                                
                                 # click on "Rate" button and select rating option, then submit rating
                                 locator = (By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')
                                 button = wait.until(lambda d: (lambda el: el if el.get_attribute("aria-disabled") == "false" else False)(d.find_element(*locator)))
-                                element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"]')
-                                if element_rating_bar:
-                                    try:
-                                        has_existing_rating = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"] span')
-                                        existing_rating = int(has_existing_rating.text.strip())
-                                    except NoSuchElementException:
-                                        existing_rating = None 
-                                        
-                                    if existing_rating != item["Rating"]:
-                                        driver.execute_script("arguments[0].click();", button)
-                                        rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
-                                        driver.execute_script("arguments[0].click();", rating_option_element)
-                                        submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                                        driver.execute_script("arguments[0].click();", submit_element)
-                                        time.sleep(1)
-                                        
-                                        print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
-                                        
-                                    else:
-                                        error_message1 = f' - Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
-                                        error_message2 = f"   - Rating already exists on IMDB for this {item['Type']}. Rating: ({item['Rating']})"
-                                        EL.logger.error(error_message1)
-                                        EL.logger.error(error_message2)
+                                try:
+                                    has_existing_rating = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__score"] span')
+                                    existing_rating_text = has_existing_rating.get_attribute("textContent").strip()
+                                    existing_rating = int(existing_rating_text)
+                                except NoSuchElementException:
+                                    existing_rating = None
+                                except ValueError as e:
+                                    error_message = f'There was a ValueError when attempting to get existing rating for for this item {item["Type"]}. See error log for details. Script will still attempt to rate this {item["Type"]}. : ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
+                                    print(error_message)
+                                    existing_rating = None
+                                    EL.logger.error(error_message, exc_info=True)
+                                    
+                                if existing_rating != item["Rating"]:
+                                    button = driver.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')
+                                    driver.execute_script("arguments[0].click();", button)
+                                    rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                                    driver.execute_script("arguments[0].click();", rating_option_element)
+                                    submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                                    driver.execute_script("arguments[0].click();", submit_element)
+                                    time.sleep(1)
+                                    
+                                    print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
+                                    
+                                else:
+                                    error_message1 = f' - Rating already exists on IMDB for this {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
+                                    print(error_message1)
+                                    EL.logger.error(error_message1)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 
