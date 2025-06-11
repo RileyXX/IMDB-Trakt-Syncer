@@ -324,7 +324,7 @@ def get_imdb_ratings(driver, wait, directory):
             os.remove(ratings_path)
         
     except FileNotFoundError as e:
-        error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
+        error_message = f"{ratings_filename} file not found. Assuming the IMDB list is empty."
         print(error_message)
         EL.logger.error(error_message, exc_info=True)
         """
@@ -398,7 +398,7 @@ def get_imdb_checkins(driver, wait, directory):
             os.remove(checkins_path)
         
     except FileNotFoundError as e:
-        error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
+        error_message = f"{checkins_filename} file not found. Assuming the IMDB list is empty."
         print(error_message)
         EL.logger.error(error_message, exc_info=True)
         """
