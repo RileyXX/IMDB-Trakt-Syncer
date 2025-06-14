@@ -88,8 +88,12 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
         
-        # Locate all elements with the selector
-        summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
+        try:
+            # Locate all elements with the selector
+            summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
+        except TimeoutException:
+            print("No items found when attempting to download IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
+            break
 
         # Check if any summary item contains "in progress"
         if not check_in_progress(summary_items):
