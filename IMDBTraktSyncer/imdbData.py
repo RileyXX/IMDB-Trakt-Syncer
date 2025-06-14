@@ -92,7 +92,7 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Locate all elements with the selector
             summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
         except TimeoutException:
-            print("No items found when attempting to download IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
+            print("No items found when attempting to generate IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
             break
 
         # Check if any summary item contains "in progress"
@@ -136,8 +136,9 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     # Locate all export blocks
     try:
         summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
-    except Exception:
-        raise Exception("Failed to locate export summary items.")
+    except TimeoutException:
+        print("No items found when attempting to download IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
+        return driver, wait
 
     # Helper function to find buttons for CSV downloads
     def find_button(item_text):
