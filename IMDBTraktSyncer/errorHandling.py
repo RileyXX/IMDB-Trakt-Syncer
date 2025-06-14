@@ -605,14 +605,14 @@ def get_items_older_than_x_days(items, days):
 
     return [item for item in items if is_older(item)]
     
-def check_if_watch_history_limit_reached(list):
+def check_if_watch_history_limit_reached(size):
     """
-    Checks if the list has 10,000 or more items.
+    Checks if the watch history has 10,000 or more items.
     If true, updates the sync_watch_history in credentials.txt to False
     and marks the watch history limit as reached.
     
     Args:
-        list (list): List of the user's watch history.
+        size (int): Size of the user's watch history.
     
     Returns:
         bool: True if the watch history limit has been reached, False otherwise.
@@ -634,7 +634,7 @@ def check_if_watch_history_limit_reached(list):
     '''
 
     # Check if list has 10,000 or more items
-    if len(list) >= 9999:
+    if size >= 9999:
         '''
         # Update sync_watch_history to False
         credentials['sync_watch_history'] = False
@@ -657,14 +657,14 @@ def check_if_watch_history_limit_reached(list):
     # Return False if the limit hasn't been reached
     return False
     
-def check_if_watchlist_limit_reached(list):
+def check_if_watchlist_limit_reached(size):
     """
-    Checks if the list has 10,000 or more items.
+    Checks if the watchlist is 10,000 or more items.
     If true, updates the sync_watchlist in credentials.txt to False
     and marks the watchlist limit as reached.
     
     Args:
-        list (list): List of the user's watchlist.
+        size (int): Size of the user's watchlist.
     
     Returns:
         bool: True if the watchlist limit has been reached, False otherwise.
@@ -683,7 +683,7 @@ def check_if_watchlist_limit_reached(list):
         return False  # Return False if the file doesn't exist
 
     # Check if list has 10,000 or more items
-    if len(list) >= 9999:
+    if size >= 9999:
         # Update sync_watchlist to False
         credentials['sync_watchlist'] = False
         

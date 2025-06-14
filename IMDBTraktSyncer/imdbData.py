@@ -218,7 +218,9 @@ def get_imdb_watchlist(driver, wait, directory):
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
 
+            imdb_watchlist_size = 0
             for row in reader:
+                imdb_watchlist_size += 1
                 title = row[header_index['Title']]
                 year = row[header_index['Year']]
                 year = int(year) if year else None
@@ -263,9 +265,9 @@ def get_imdb_watchlist(driver, wait, directory):
     except (NoSuchElementException, TimeoutException):
         # No IMDB Watchlist Items
         imdb_watchlist = []
-        pass
+        imdb_watchlist_size = 0
     
-    return imdb_watchlist, driver, wait
+    return imdb_watchlist, imdb_watchlist_size, driver, wait
 
 def get_imdb_ratings(driver, wait, directory):
     # Get IMDB Ratings
@@ -369,7 +371,9 @@ def get_imdb_checkins(driver, wait, directory):
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
 
+            imdb_checkins_size = 0
             for row in reader:
+                imdb_checkins_size += 1
                 title = row[header_index['Title']]
                 year = row[header_index['Year']]
                 year = int(year) if year else None
@@ -415,9 +419,9 @@ def get_imdb_checkins(driver, wait, directory):
     except (NoSuchElementException, TimeoutException):
         # No IMDB Check-in Items
         imdb_checkins = []
-        pass
+        imdb_checkins_size = 0
     
-    return imdb_checkins, driver, wait
+    return imdb_checkins, imdb_checkins_size, driver, wait
             
 def get_media_type(imdb_id):
     url = f"https://api.trakt.tv/search/imdb/{imdb_id}"
