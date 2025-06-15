@@ -198,6 +198,7 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
 def get_imdb_watchlist(driver, wait, directory):
     # Get IMDB Watchlist Items
     imdb_watchlist = []
+    imdb_watchlist_size = 0
     try:          
         # Look for 'watchlist.csv'
         watchlist_filename = 'watchlist.csv'
@@ -219,7 +220,6 @@ def get_imdb_watchlist(driver, wait, directory):
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
 
-            imdb_watchlist_size = 0
             for row in reader:
                 imdb_watchlist_size += 1
                 title = row[header_index['Title']]
@@ -253,6 +253,8 @@ def get_imdb_watchlist(driver, wait, directory):
             os.remove(watchlist_path)
         
     except FileNotFoundError as e:
+        imdb_watchlist = []
+        imdb_watchlist_size = 0
         error_message = f"{watchlist_filename} file not found. Assuming the IMDB list is empty."
         print(error_message)
         EL.logger.error(error_message, exc_info=True)
@@ -351,6 +353,7 @@ def get_imdb_ratings(driver, wait, directory):
 def get_imdb_checkins(driver, wait, directory):
     # Get IMDB Check-ins
     imdb_checkins = []
+    imdb_checkins_size = 0
     try:
         # Look for 'checkins.csv'
         checkins_filename = 'checkins.csv'
@@ -372,7 +375,6 @@ def get_imdb_checkins(driver, wait, directory):
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
 
-            imdb_checkins_size = 0
             for row in reader:
                 imdb_checkins_size += 1
                 title = row[header_index['Title']]
@@ -407,6 +409,8 @@ def get_imdb_checkins(driver, wait, directory):
             os.remove(checkins_path)
         
     except FileNotFoundError as e:
+        imdb_checkins = []
+        imdb_checkins_size = 0
         error_message = f"{checkins_filename} file not found. Assuming the IMDB list is empty."
         print(error_message)
         EL.logger.error(error_message, exc_info=True)
