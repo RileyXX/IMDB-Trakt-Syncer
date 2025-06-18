@@ -885,6 +885,10 @@ def main():
                                     review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#text-input__0")))
                                     review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#textarea__0")))
                                     
+                                    # Clear old review inputs if review already exists
+                                    review_title_input.clear()
+                                    review_input.clear()
+                                    
                                     review_title_input.send_keys("My Review")
                                     review_input.send_keys(item["Comment"])
                                     

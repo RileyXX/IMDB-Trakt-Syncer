@@ -465,7 +465,7 @@ def get_imdb_reviews(driver, wait, directory):
         while True:
             try:
                 try:
-                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid='review-card-parent']")))
                 except (NoSuchElementException, TimeoutException):
                     # No review elements found. There are no reviews. Exit the loop without an error.
                     error_message = "No review elements found. There are no reviews. Exit the loop without an error."
@@ -475,13 +475,13 @@ def get_imdb_reviews(driver, wait, directory):
                 for element in review_elements:
                     review = {}
                     # Extract review details
-                    review['Title'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").text
-                    review['Year'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header span").text.strip('()').split('–')[0].strip()
-                    review['Year'] = int(review['Year']) if review['Year'] else None
-                    review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, ".lister-item-header a").get_attribute("href").split('/')[4]
-                    review['IMDBReviewID'] = element.get_attribute("data-review-id")
-                    review['Comment'] = element.find_element(By.CSS_SELECTOR, ".content > .text").text.strip()
-                    spoiler_warning_elements = element.find_elements(By.CSS_SELECTOR, ".spoiler-warning")
+                    review['Title'] = element.find_element(By.CSS_SELECTOR, "div[data-testid='review-title-header'] h3 span").text.strip()
+                    date_text = element.find_element(By.CSS_SELECTOR, "li.review-date").text
+                    review['Year'] = int(date_text.strip().split()[-1]) if date_text else None
+                    review['IMDB_ID'] = element.find_element(By.CSS_SELECTOR, "div[data-testid='review-summary'] a").get_attribute("href").split('/')[4]
+                    review['IMDBReviewID'] = element.find_element(By.CSS_SELECTOR, "div[data-testid='review-summary'] a").get_attribute("href").split('/')[6]
+                    review['Comment'] = element.find_element(By.CSS_SELECTOR, "div[data-testid='review-overflow']").text.strip()
+                    spoiler_warning_elements = element.find_elements(By.CSS_SELECTOR, ".review-spoiler-button")
                     review['Spoiler'] = len(spoiler_warning_elements) > 0
                     # Get the media type using Trakt API
                     media_type = get_media_type(review['IMDB_ID'])
@@ -492,11 +492,14 @@ def get_imdb_reviews(driver, wait, directory):
 
                     if review['Type'] != 'unknown':
                         reviews.append(review)
-
+                    
                 try:
                     # Check if "Next" link exists
-                    next_link = driver.find_element(By.CSS_SELECTOR, "a.next-page")
-                    if next_link.get_attribute("href") == "#":
+                    next_link = driver.find_element(By.CSS_SELECTOR, "div[data-testid='index-pagination-nxt']")
+                    # Get the 'aria-disabled' attribute
+                    is_disabled = next_link.get_attribute("aria-disabled")
+                    
+                    if is_disabled is None or is_disabled == "true":
                         break  # No more pages, exit the loop
                     
                     # Get the current url before clicking the "Next" link
@@ -512,7 +515,7 @@ def get_imdb_reviews(driver, wait, directory):
                     wait.until(lambda driver: driver.current_url != current_url)
                     
                     # Refresh review_elements
-                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".imdb-user-review")))
+                    review_elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid='review-card-parent']")))
 
                 except NoSuchElementException:
                     # "Next" link not found on IMDB reviews page, exit the loop without error
