@@ -188,7 +188,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             
             # Update resolved_url with the current URL after potential redirects
             resolved_url = driver.current_url
-
+            
             # Handle status codes
             if status_code is None or status_code == 0:
                 print(f"   - Unable to determine page load status. Status code returned 0 or None. Retrying...")
@@ -203,8 +203,12 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 print(f"   - Remaining time for retries: {int(remaining_time)} seconds.")
                 time.sleep(min(remaining_time, initial_wait_time))
                 continue
-
+                        
+            elif status_code in [408, 425, 429, 500, 502, 503, 504]:
+                raise PageLoadException(f"Retryable HTTP error encountered: {status_code}")
+            
             elif status_code >= 400:
+                print(f"   - Non-retryable error encountered. Status code: {status_code} Aborting.")
                 return False, status_code, url, driver, wait
 
             else:
@@ -272,27 +276,20 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             filename = os.path.basename(inspect.getfile(frame))
             print(f"   - PageLoadException: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
 
-            retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
+            elapsed_time = time.time() - start_time
+            total_time_spent += elapsed_time
 
-            if status_code in retryable_error_codes:
-                elapsed_time = time.time() - start_time
-                total_time_spent += elapsed_time
-
-                if total_time_spent >= total_wait_time:
-                    print("   - Total wait time exceeded. Aborting after page load exception.")
-                    return False, None, url, driver, wait
-
-                remaining_time = total_wait_time - total_time_spent
-                print(f"   - Retryable error detected. Retrying... Time Remaining: {int(remaining_time)}s")
-                time.sleep(min(remaining_time, initial_wait_time))
-                continue
-
-            else:
-                print("   - Non-retryable error encountered. Aborting.")
+            if total_time_spent >= total_wait_time:
+                print("   - Total wait time exceeded. Aborting after page load exception.")
                 return False, None, url, driver, wait
 
+            remaining_time = total_wait_time - total_time_spent
+            print(f"   - Retryable error detected. Retrying... Time Remaining: {int(remaining_time)}s")
+            time.sleep(min(remaining_time, initial_wait_time))
+            continue
+
     print("   - All retries failed. Unable to load page.")
-    return False, None, url, driver, wait
+    return False, status_code, url, driver, wait
     
 def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):
     """

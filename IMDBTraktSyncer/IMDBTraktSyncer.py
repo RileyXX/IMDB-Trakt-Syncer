@@ -146,10 +146,10 @@ def main():
             time.sleep(2)
 
             # Check if still signed in from previous session
-            element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
-            if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
+            try:
+                element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")))
                 print("Successfully signed in to IMDB")
-            else:
+            except TimeoutException:
                 # Not signed in from previous session, proceed with sign in logic
                 time.sleep(2)
                 
@@ -159,10 +159,14 @@ def main():
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
-                # wait for sign in link to appear and then click it
-                sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
-                if 'IMDb' in sign_in_link.text:
-                    driver.execute_script("arguments[0].click();", sign_in_link)
+                # Wait for sign in link to appear and then click it
+                links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.display-button-container a.ipc-btn')))
+
+                # Loop through the elements to find the one with 'IMDb' in the text
+                for link in links:
+                    if 'IMDb' in link.get_attribute('textContent'):
+                        driver.execute_script("arguments[0].click();", link)
+                        break  # stop after clicking the first matching one
 
                 # wait for email input field and password input field to appear, then enter credentials and submit
                 email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
@@ -183,10 +187,10 @@ def main():
                 time.sleep(2)
 
                 # Check if signed in
-                element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
-                if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
+                try:
+                    element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")))
                     print("Successfully signed in to IMDB")
-                else:
+                except TimeoutException:
                     print("\nError: Not signed in to IMDB")
                     print("\nPossible Causes and Solutions:")
                     print("- IMDB captcha check triggered or incorrect IMDB login.")
