@@ -160,13 +160,16 @@ def main():
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
                 # Wait for sign in link to appear and then click it
-                links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, '.display-button-container a.ipc-btn')))
+                links = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'a')))
 
-                # Loop through the elements to find the one with 'IMDb' in the text
+                # Loop through the elements to find the one with 'Sign in with IMDb' in the text
                 for link in links:
-                    if 'IMDb' in link.get_attribute('textContent'):
+                    text = link.get_attribute('textContent')
+                    if text and 'sign in with imdb' in text.lower():
                         driver.execute_script("arguments[0].click();", link)
                         break  # stop after clicking the first matching one
+                else:
+                    raise ValueError("IMDB sign in link not found on IMDB login page. No link with text 'Sign in with IMDb' was found.")
 
                 # wait for email input field and password input field to appear, then enter credentials and submit
                 email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
