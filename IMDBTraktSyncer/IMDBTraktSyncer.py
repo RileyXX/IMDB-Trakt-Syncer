@@ -244,12 +244,12 @@ def main():
                 # Page failed to load, raise an exception
                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
             # Find reference view checkbox
-            reference_checkbox = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id*='ttdp']"))).get_attribute("checked")
+            reference_checkbox = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id*='reference-view-toggle']"))).get_attribute("checked")
             reference_view_changed = False
             if reference_checkbox:
                 print("Temporarily disabling reference view IMDB setting for compatability. See: https://www.imdb.com/preferences/general")
                 # Click reference view checkbox
-                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='reference-view-toggle']")))
                 driver.execute_script("arguments[0].click();", reference_checkbox)
                 # Submit
                 submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
@@ -1293,7 +1293,7 @@ def main():
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                 # Click reference view checkbox
-                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='reference-view-toggle']")))
                 driver.execute_script("arguments[0].click();", reference_checkbox)
                 # Submit
                 submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
