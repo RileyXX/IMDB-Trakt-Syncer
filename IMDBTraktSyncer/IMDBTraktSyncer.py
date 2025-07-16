@@ -160,7 +160,7 @@ def main():
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                 
                 # Wait for sign in link to appear and then click it
-                sign_in_link = wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sign in with imdb')]")))
+                sign_in_link = wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'display-button-container')]//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'imdb')]")))
                 driver.execute_script("arguments[0].click();", sign_in_link)
                 
                 # wait for email input field and password input field to appear, then enter credentials and submit
