@@ -1311,5 +1311,7 @@ def main():
             if 'service' in locals() and service is not None:
                 service.stop()
 
+            raise e
+
 if __name__ == '__main__':
     main()
