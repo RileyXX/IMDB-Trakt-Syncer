@@ -490,8 +490,8 @@ def get_imdb_reviews(driver, wait, directory):
                     else:
                         review['Type'] = 'unknown'
 
-                    if review['Type'] != 'unknown':
-                        reviews.append(review)
+                    # if review['Type'] != 'unknown':
+                    reviews.append(review)
                     
                 try:
                     # Check if "Next" link exists
@@ -540,7 +540,7 @@ def get_imdb_reviews(driver, wait, directory):
         print(f"{error_message}")
         traceback.print_exc()
         EL.logger.error(error_message, exc_info=True)
-
+    
     # Filter out duplicate reviews for the same item based on ID
     filtered_reviews = []
     seen = set()

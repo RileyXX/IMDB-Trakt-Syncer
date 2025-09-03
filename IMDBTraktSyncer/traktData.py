@@ -125,9 +125,14 @@ def get_trakt_comments(encoded_username):
                 show_movie_or_episode_year = None
                 show_movie_or_episode_imdb_id = None
             else:
-                show_movie_or_episode_title = None
-                show_movie_or_episode_year = None
-                show_movie_or_episode_imdb_id = None
+                # Generic fallback for unknown types
+                # Find the first dict that has title/year/ids
+                for key, value in comment.items():
+                    if isinstance(value, dict) and "title" in value:
+                        show_movie_or_episode_title = value.get("title")
+                        show_movie_or_episode_year = value.get("year")
+                        show_movie_or_episode_imdb_id = remove_slashes(value.get("ids", {}).get("imdb"))
+                        break
 
             comment_info = comment['comment']
             trakt_comment_id = comment_info.get('id')
