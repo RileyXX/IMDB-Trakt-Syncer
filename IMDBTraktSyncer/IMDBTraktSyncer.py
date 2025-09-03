@@ -8,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -289,7 +290,7 @@ def main():
             
             # Remove duplicates from Trakt watch_history
             trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
-            
+                       
             # Get trakt and imdb data and filter out items with missing imdb id
             trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
             imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
@@ -299,6 +300,9 @@ def main():
             imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
             trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
             imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
+            
+            # Remove unknown Types from review lists
+            imdb_reviews, trakt_reviews = EH.remove_unknown_types(imdb_reviews, trakt_reviews)
                        
             # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
             trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
@@ -872,8 +876,6 @@ def main():
                                         episode_title = f'[S{season_number}E{episode_number}] '
                                     else:
                                         episode_title = ''
-                                
-                                    print(f" - Submitting review ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
                                     success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
@@ -881,12 +883,25 @@ def main():
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                                     
+                                    # wait for input dom elements to fully load
+                                    time.sleep(3)
+                                    
                                     review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#text-input__0")))
                                     review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#textarea__0")))
                                     
+                                    existing_title = review_title_input.get_attribute("value") or ""
+                                    existing_review = review_input.get_attribute("value") or ""
+                                    
+                                    # Skip submission if review title or review body already contains text
+                                    if existing_title.strip() or existing_review.strip():
+                                        print(f"   - Skipped setting review for {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']}) — a review already exists for this item")
+                                        continue
+                                    
                                     # Clear old review inputs if review already exists
-                                    review_title_input.clear()
-                                    review_input.clear()
+                                    driver.execute_script("arguments[0].click();", review_title_input)
+                                    review_title_input.send_keys(Keys.CONTROL + "a", Keys.DELETE)
+                                    driver.execute_script("arguments[0].click();", review_input)
+                                    review_input.send_keys(Keys.CONTROL + "a", Keys.DELETE)
                                     
                                     review_title_input.send_keys("My Review")
                                     review_input.send_keys(item["Comment"])
@@ -895,7 +910,7 @@ def main():
                                     yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#is_spoiler-0")))
                                     
                                     if item["Spoiler"]:
-                                        driver.execute_script("arguments[0].click();", yes_element)                                        
+                                        driver.execute_script("arguments[0].click();", yes_element)
                                     else:
                                         driver.execute_script("arguments[0].click();", no_element)
                                                             
@@ -904,6 +919,9 @@ def main():
                                     driver.execute_script("arguments[0].click();", submit_button)
                                     
                                     time.sleep(3) # wait for rating to submit
+                                    
+                                    print(f" - Submitted review ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
+                                    
                                 except (NoSuchElementException, TimeoutException, PageLoadException):
                                     error_message = f"Failed to submit review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})"
                                     print(f"   - {error_message}")

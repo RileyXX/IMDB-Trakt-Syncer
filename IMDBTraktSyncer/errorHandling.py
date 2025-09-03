@@ -500,6 +500,50 @@ def filter_items(source_list, target_list, key="IMDB_ID"):
     source_set = {item[key] for item in source_list}
     return [item for item in target_list if item[key] not in source_set]
     
+def remove_unknown_types(list_a, list_b):
+    """
+    Remove items with unknown or invalid 'Type' from two lists.
+    
+    Rules:
+    - Keep only items where Type is 'movie', 'show', or 'episode'.
+    - If one list has None/invalid type but the other has a valid type 
+      for the same IMDB_ID, assume the valid type applies to both.
+    
+    Args:
+        list_a (list): First list of dicts (e.g. trakt_reviews, imdb_reviews).
+        list_b (list): Second list of dicts (e.g. trakt_ratings, imdb_ratings).
+    
+    Returns:
+        tuple: (cleaned_list_a, cleaned_list_b)
+    """
+    valid_types = {"movie", "show", "episode"}
+
+    # Step 1: Build a map of IMDB_ID -> valid type (if found in either list)
+    type_map = {}
+    for item in list_a + list_b:
+        imdb_id = item.get("IMDB_ID")
+        itype = item.get("Type")
+        if imdb_id and itype in valid_types:
+            type_map[imdb_id] = itype
+
+    # Step 2: Filter & update lists
+    def filter_list_items(items):
+        filtered = []
+        for item in items:
+            imdb_id = item.get("IMDB_ID")
+            itype = item.get("Type")
+
+            if itype in valid_types:
+                filtered.append(item)
+            elif imdb_id in type_map:
+                # Fix missing/invalid type
+                item["Type"] = type_map[imdb_id]
+                filtered.append(item)
+            # else: drop
+        return filtered
+
+    return filter_list_items(list_a), filter_list_items(list_b)
+    
 def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imdb_id(combined_watchlist_to_remove, imdb_watchlist_to_set, trakt_watchlist_to_set):
     # Extract IMDB_IDs from the items to remove
     imdb_ids_to_remove = {item['IMDB_ID'] for item in combined_watchlist_to_remove}
