@@ -7,14 +7,7 @@ import inspect
 import json
 import re
 from datetime import datetime, timedelta
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import WebDriverException, NoSuchElementException, TimeoutException, StaleElementReferenceException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
+from selenium.common.exceptions import WebDriverException, TimeoutException
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,7 +31,7 @@ def report_error(error_message):
     print("-" * 50)
 
 def make_trakt_request(url, headers=None, params=None, payload=None, max_retries=5):
-    
+
     # Set default headers if none are provided
     if headers is None:
         # Get credentials
@@ -54,7 +47,7 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
     retry_delay = 1  # Initial delay between retries (in seconds)
     retry_attempts = 0  # Count of retry attempts made
     connection_timeout = 20  # Timeout for requests (in seconds)
-    total_wait_time = sum(retry_delay * (2 ** i) for i in range(max_retries))  # Total possible wait time
+    total_wait_time = sum(1 * (2 ** i) for i in range(max_retries))  # Total possible wait time
 
     # Retry loop to handle network errors or server overload scenarios
     while retry_attempts < max_retries:
@@ -71,39 +64,47 @@ def make_trakt_request(url, headers=None, params=None, payload=None, max_retries
             else:
                 # POST request with JSON payload
                 response = requests.post(url, headers=headers, json=payload, timeout=connection_timeout)
-
-            # If request is successful, return the response
-            if response.status_code in [200, 201, 204]:
-                return response
             
-            # Handle retryable server errors and rate limit exceeded
-            elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
-                retry_attempts += 1  # Increment retry counter
+            if response is not None:
+                # If request is successful, return the response
+                if response.status_code in [200, 201, 204]:
+                    return response
+                
+                # Handle retryable server errors and rate limit exceeded
+                elif response.status_code in [429, 500, 502, 503, 504, 520, 521, 522]:
+                    retry_attempts += 1  # Increment retry counter
 
-                # Respect the 'Retry-After' header if provided, otherwise use default delay
-                retry_after = int(response.headers.get('Retry-After', retry_delay))
-                if response.status_code != 429:
-                    remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
-                    print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
-                          f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
-                    EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
-                                      f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                    # Respect the 'Retry-After' header if provided, otherwise use default delay
+                    retry_after = int(response.headers.get('Retry-After', retry_delay))
+                    if response.status_code != 429:
+                        remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
+                        print(f" - Server returned {response.status_code}. Retrying after {retry_after}s... "
+                              f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
+                        EL.logger.warning(f"Server returned {response.status_code}. Retrying after {retry_after}s... "
+                                          f"({retry_attempts}/{max_retries}) - Time remaining: {remaining_time}s")
 
-                time.sleep(retry_after)  # Wait before retrying
-                retry_delay *= 2  # Apply exponential backoff for retries
-            
+                    time.sleep(retry_after)  # Wait before retrying
+                    retry_delay *= 2  # Apply exponential backoff for retries
+                
+                else:
+                    # Handle non-retryable HTTP status codes
+                    status_message = get_trakt_message(response.status_code)
+                    error_message = f"Request failed with status code {response.status_code}: {status_message}"
+                    print(f" - {error_message}")
+                    EL.logger.error(f"{error_message}. URL: {url}")
+                    return response  # Exit with failure for non-retryable errors
             else:
-                # Handle non-retryable HTTP status codes
-                status_message = get_trakt_message(response.status_code)
-                error_message = f"Request failed with status code {response.status_code}: {status_message}"
-                print(f" - {error_message}")
-                EL.logger.error(f"{error_message}. URL: {url}")
-                return response  # Exit with failure for non-retryable errors
+                # Failsafe in case response is still None for any unexpected reason
+                retry_attempts += 1
+                print(f" - No response received. Retrying... ({retry_attempts}/{max_retries})")
+                EL.logger.warning(f"No response received. Retrying... ({retry_attempts}/{max_retries})")
+                time.sleep(retry_delay)
+                retry_delay *= 2
 
         # Handle Network errors (connection issues, timeouts, SSL, etc.)
         except (ConnectionError, Timeout, TooManyRedirects, SSLError, ProxyError) as network_error:
             retry_attempts += 1  # Increment retry counter
-            remaining_time = total_wait_time - sum(retry_delay * (2 ** i) for i in range(retry_attempts))
+            remaining_time = sum(1 * (2 ** i) for i in range(retry_attempts, max_retries))
             print(f" - Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
                   f"Time remaining: {remaining_time}s")
             EL.logger.warning(f"Network error: {network_error}. Retrying ({retry_attempts}/{max_retries})... "
@@ -153,13 +154,10 @@ def get_trakt_message(status_code):
     return error_messages.get(status_code, "Unknown error")
 
 def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_time=5):
-    num_retries = total_wait_time // initial_wait_time
-    wait_time = total_wait_time / num_retries
-    max_retries = num_retries
+    total_time_spent = 0  # Track total elapsed time
     status_code = None
-    total_time_spent = 0  # Track total time spent across retries
 
-    for retry in range(max_retries):
+    while total_time_spent < total_wait_time:
         try:
             start_time = time.time()  # Track time taken for each retry attempt
             
@@ -190,7 +188,7 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             
             # Update resolved_url with the current URL after potential redirects
             resolved_url = driver.current_url
-
+            
             # Handle status codes
             if status_code is None or status_code == 0:
                 print(f"   - Unable to determine page load status. Status code returned 0 or None. Retrying...")
@@ -201,12 +199,17 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                     print("   - Total wait time exceeded. Aborting.")
                     return False, None, url, driver, wait
 
-                print(f"   - Remaining time for retries: {int(total_wait_time - total_time_spent)} seconds.")
-                time.sleep(wait_time)
+                remaining_time = total_wait_time - total_time_spent
+                print(f"   - Remaining time for retries: {int(remaining_time)} seconds.")
+                time.sleep(min(remaining_time, initial_wait_time))
                 continue
-
+                        
+            elif status_code in [408, 425, 429, 500, 502, 503, 504]:
+                raise PageLoadException(f"Retryable HTTP error encountered: {status_code}")
+            
             elif status_code >= 400:
-                raise PageLoadException(f'Failed to load page. Status code: {status_code}. URL: {url}')
+                print(f"   - Non-retryable error encountered. Status code: {status_code} Aborting.")
+                return False, status_code, url, driver, wait
 
             else:
                 # Page loaded successfully
@@ -225,8 +228,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 print("   - Total wait time exceeded. Aborting after timeout.")
                 return False, None, url, driver, wait
 
-            print(f"   - Retrying ({retry + 1}/{max_retries}) Time Remaining: {int(total_wait_time - total_time_spent)}s")
-            time.sleep(wait_time)
+            remaining_time = total_wait_time - total_time_spent
+            print(f"   - Retrying... Time Remaining: {int(remaining_time)}s")
+            time.sleep(min(remaining_time, initial_wait_time))
             continue
 
         except WebDriverException as e:
@@ -257,8 +261,9 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                     print("   - Total wait time exceeded. Aborting after WebDriver error.")
                     return False, None, url, driver, wait
 
-                print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
-                time.sleep(wait_time)
+                remaining_time = total_wait_time - total_time_spent
+                print(f"   - Retryable network error detected. Retrying... Time Remaining: {int(remaining_time)}s")
+                time.sleep(min(remaining_time, initial_wait_time))
                 continue
 
             else:
@@ -271,26 +276,20 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             filename = os.path.basename(inspect.getfile(frame))
             print(f"   - PageLoadException: {str(e).splitlines()[0]} URL: {url} (File: {filename}, Line: {lineno})")
 
-            retryable_error_codes = [408, 425, 429, 500, 502, 503, 504]
+            elapsed_time = time.time() - start_time
+            total_time_spent += elapsed_time
 
-            if status_code in retryable_error_codes:
-                elapsed_time = time.time() - start_time
-                total_time_spent += elapsed_time
-
-                if total_time_spent >= total_wait_time:
-                    print("   - Total wait time exceeded. Aborting after page load exception.")
-                    return False, None, url, driver, wait
-
-                print(f"   - Retryable error detected. Retrying... Time Remaining: {int(total_wait_time - total_time_spent)}s")
-                time.sleep(wait_time)
-                continue
-
-            else:
-                print("   - Non-retryable error encountered. Aborting.")
+            if total_time_spent >= total_wait_time:
+                print("   - Total wait time exceeded. Aborting after page load exception.")
                 return False, None, url, driver, wait
 
+            remaining_time = total_wait_time - total_time_spent
+            print(f"   - Retryable error detected. Retrying... Time Remaining: {int(remaining_time)}s")
+            time.sleep(min(remaining_time, initial_wait_time))
+            continue
+
     print("   - All retries failed. Unable to load page.")
-    return False, None, url, driver, wait
+    return False, status_code, url, driver, wait
     
 def make_request_with_retries(url, method="GET", headers=None, params=None, payload=None, max_retries=5, timeout=(30, 300), stream=False):
     """
@@ -329,9 +328,19 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
 
             # Handle retryable HTTP status codes (rate limits or server errors)
             if response.status_code in [429, 500, 502, 503, 504]:
-                retry_after = int(response.headers.get("Retry-After", retry_delay))
+                retry_after = response.headers.get("Retry-After")
+
+                if retry_after:
+                    try:
+                        retry_after = int(retry_after)  # If it's a number, use it as seconds
+                    except ValueError:
+                        retry_after = retry_delay  # If it's not a number, default back to exponential delay
+                else:
+                    retry_after = retry_delay  # Default exponential backoff if no header is provided
+                
                 print(f"Server error {response.status_code}. Retrying in {retry_after} seconds...")
-                time.sleep(retry_after)
+                time.sleep(retry_after)  # Wait before retrying
+                
                 retry_delay *= 2  # Exponential backoff
                 retry_attempts += 1
             else:
@@ -343,7 +352,7 @@ def make_request_with_retries(url, method="GET", headers=None, params=None, payl
             # Handle network-related errors
             retry_attempts += 1
             print(f"Network error: {network_err}. Retrying in {retry_delay} seconds... (Attempt {retry_attempts}/{max_retries})")
-            time.sleep(retry_delay)
+            time.sleep(retry_delay)  # Wait before retrying
             retry_delay *= 2  # Exponential backoff
 
         except RequestException as req_err:
@@ -491,6 +500,50 @@ def filter_items(source_list, target_list, key="IMDB_ID"):
     source_set = {item[key] for item in source_list}
     return [item for item in target_list if item[key] not in source_set]
     
+def remove_unknown_types(list_a, list_b):
+    """
+    Remove items with unknown or invalid 'Type' from two lists.
+    
+    Rules:
+    - Keep only items where Type is 'movie', 'show', or 'episode'.
+    - If one list has None/invalid type but the other has a valid type 
+      for the same IMDB_ID, assume the valid type applies to both.
+    
+    Args:
+        list_a (list): First list of dicts (e.g. trakt_reviews, imdb_reviews).
+        list_b (list): Second list of dicts (e.g. trakt_ratings, imdb_ratings).
+    
+    Returns:
+        tuple: (cleaned_list_a, cleaned_list_b)
+    """
+    valid_types = {"movie", "show", "episode"}
+
+    # Step 1: Build a map of IMDB_ID -> valid type (if found in either list)
+    type_map = {}
+    for item in list_a + list_b:
+        imdb_id = item.get("IMDB_ID")
+        itype = item.get("Type")
+        if imdb_id and itype in valid_types:
+            type_map[imdb_id] = itype
+
+    # Step 2: Filter & update lists
+    def filter_list_items(items):
+        filtered = []
+        for item in items:
+            imdb_id = item.get("IMDB_ID")
+            itype = item.get("Type")
+
+            if itype in valid_types:
+                filtered.append(item)
+            elif imdb_id in type_map:
+                # Fix missing/invalid type
+                item["Type"] = type_map[imdb_id]
+                filtered.append(item)
+            # else: drop
+        return filtered
+
+    return filter_list_items(list_a), filter_list_items(list_b)
+    
 def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imdb_id(combined_watchlist_to_remove, imdb_watchlist_to_set, trakt_watchlist_to_set):
     # Extract IMDB_IDs from the items to remove
     imdb_ids_to_remove = {item['IMDB_ID'] for item in combined_watchlist_to_remove}
@@ -507,15 +560,28 @@ def remove_combined_watchlist_to_remove_items_from_watchlist_to_set_lists_by_imd
 
     return imdb_watchlist_to_set, trakt_watchlist_to_set
     
-# Function to remove duplicates based on IMDB_ID
+# Function to remove duplicates based on IMDB_ID, keeping the older one based on Date_Added
 def remove_duplicates_by_imdb_id(watched_content):
-    seen = set()
-    unique_content = []
+    seen = {}
     for item in watched_content:
-        if item['IMDB_ID'] not in seen:
-            unique_content.append(item)
-            seen.add(item['IMDB_ID'])
-    return unique_content
+        imdb_id = item['IMDB_ID']
+        date_added = item.get('Date_Added')
+
+        if date_added:
+            date_added = datetime.strptime(date_added, '%Y-%m-%dT%H:%M:%S.000Z')
+        
+        if imdb_id not in seen:
+            seen[imdb_id] = item
+        else:
+            existing_date = seen[imdb_id].get('Date_Added')
+            if existing_date:
+                existing_date = datetime.strptime(existing_date, '%Y-%m-%dT%H:%M:%S.000Z')
+                if date_added and date_added < existing_date:
+                    seen[imdb_id] = item
+            elif not date_added:
+                continue  # Keep the first one encountered when no Date_Added is available
+
+    return list(seen.values())
     
 # Function to remove items with Type 'show'
 def remove_shows(watched_content):
@@ -580,14 +646,14 @@ def get_items_older_than_x_days(items, days):
 
     return [item for item in items if is_older(item)]
     
-def check_if_watch_history_limit_reached(list):
+def check_if_watch_history_limit_reached(size):
     """
-    Checks if the list has 10,000 or more items.
+    Checks if the watch history has 10,000 or more items.
     If true, updates the sync_watch_history in credentials.txt to False
     and marks the watch history limit as reached.
     
     Args:
-        list (list): List of the user's watch history.
+        size (int): Size of the user's watch history.
     
     Returns:
         bool: True if the watch history limit has been reached, False otherwise.
@@ -609,7 +675,7 @@ def check_if_watch_history_limit_reached(list):
     '''
 
     # Check if list has 10,000 or more items
-    if len(list) >= 9999:
+    if size >= 9999:
         '''
         # Update sync_watch_history to False
         credentials['sync_watch_history'] = False
@@ -632,14 +698,14 @@ def check_if_watch_history_limit_reached(list):
     # Return False if the limit hasn't been reached
     return False
     
-def check_if_watchlist_limit_reached(list):
+def check_if_watchlist_limit_reached(size):
     """
-    Checks if the list has 10,000 or more items.
+    Checks if the watchlist is 10,000 or more items.
     If true, updates the sync_watchlist in credentials.txt to False
     and marks the watchlist limit as reached.
     
     Args:
-        list (list): List of the user's watchlist.
+        size (int): Size of the user's watchlist.
     
     Returns:
         bool: True if the watchlist limit has been reached, False otherwise.
@@ -658,7 +724,7 @@ def check_if_watchlist_limit_reached(list):
         return False  # Return False if the file doesn't exist
 
     # Check if list has 10,000 or more items
-    if len(list) >= 9999:
+    if size >= 9999:
         # Update sync_watchlist to False
         credentials['sync_watchlist'] = False
         

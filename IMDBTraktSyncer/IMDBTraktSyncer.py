@@ -1,21 +1,17 @@
 import os
-import json
-import requests
 import time
 import sys
 import argparse
 import subprocess
-import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import SessionNotCreatedException
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import arguments
@@ -100,7 +96,7 @@ def main():
             options.add_argument(f"--user-data-dir={user_data_directory}")
             if headless == True:
                 options.add_argument("--headless=new")
-            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
                 "download.directory_upgrade": True,
@@ -151,10 +147,10 @@ def main():
             time.sleep(2)
 
             # Check if still signed in from previous session
-            element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
-            if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
+            try:
+                element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")))
                 print("Successfully signed in to IMDB")
-            else:
+            except TimeoutException:
                 # Not signed in from previous session, proceed with sign in logic
                 time.sleep(2)
                 
@@ -163,19 +159,18 @@ def main():
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
-
-                # wait for sign in link to appear and then click it
-                sign_in_link = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.list-group-item > .auth-provider-text')))
-                if 'IMDb' in sign_in_link.text:
-                    sign_in_link.click()
-
+                
+                # Wait for sign in link to appear and then click it
+                sign_in_link = wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(@class, 'display-button-container')]//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'imdb')]")))
+                driver.execute_script("arguments[0].click();", sign_in_link)
+                
                 # wait for email input field and password input field to appear, then enter credentials and submit
                 email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
                 password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
                 email_input.send_keys(imdb_username)
                 password_input.send_keys(imdb_password)
                 submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
-                submit_button.click()
+                driver.execute_script("arguments[0].click();", submit_button)
 
                 time.sleep(2)
 
@@ -188,10 +183,10 @@ def main():
                 time.sleep(2)
 
                 # Check if signed in
-                element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu.navbar__user")))
-                if element.find_elements(By.CSS_SELECTOR, ".imdb-header__account-toggle--logged-in"):
+                try:
+                    element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")))
                     print("Successfully signed in to IMDB")
-                else:
+                except TimeoutException:
                     print("\nError: Not signed in to IMDB")
                     print("\nPossible Causes and Solutions:")
                     print("- IMDB captcha check triggered or incorrect IMDB login.")
@@ -242,12 +237,12 @@ def main():
                 # Page failed to load, raise an exception
                 raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
             # Find reference view checkbox
-            reference_checkbox = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id*='ttdp']"))).get_attribute("checked")
+            reference_checkbox = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id*='reference-view-toggle']"))).get_attribute("checked")
             reference_view_changed = False
             if reference_checkbox:
                 print("Temporarily disabling reference view IMDB setting for compatability. See: https://www.imdb.com/preferences/general")
                 # Click reference view checkbox
-                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='reference-view-toggle']")))
                 driver.execute_script("arguments[0].click();", reference_checkbox)
                 # Submit
                 submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
@@ -276,26 +271,26 @@ def main():
             driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             driver, wait = imdbData.download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             if sync_watchlist_value or remove_watched_from_watchlists_value:
-                imdb_watchlist, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
+                imdb_watchlist, imdb_watchlist_size, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
             if sync_ratings_value or mark_rated_as_watched_value:
                 imdb_ratings, driver, wait = imdbData.get_imdb_ratings(driver, wait, directory)
             if sync_reviews_value:
                 imdb_reviews, errors_found_getting_imdb_reviews, driver, wait = imdbData.get_imdb_reviews(driver, wait, directory)
             if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
-                imdb_watch_history, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
+                imdb_watch_history, imdb_watch_history_size, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
             print('Processing IMDB Data Complete')
                         
             if sync_watchlist_value:
                 # Check if IMDB watchlist has reached the 10,000 item limit. If limit is reached, disable syncing watchlists.
-                imdb_watchlist_limit_reached = EH.check_if_watchlist_limit_reached(imdb_watchlist)
+                imdb_watchlist_limit_reached = EH.check_if_watchlist_limit_reached(imdb_watchlist_size)
                               
             if sync_watch_history_value or mark_rated_as_watched_value:
                 # Check if IMDB watch history has reached the 10,000 item limit. If limit is reached, disable syncing watch history.
-                imdb_watch_history_limit_reached = EH.check_if_watch_history_limit_reached(imdb_watch_history)
+                imdb_watch_history_limit_reached = EH.check_if_watch_history_limit_reached(imdb_watch_history_size)
             
             # Remove duplicates from Trakt watch_history
             trakt_watch_history = EH.remove_duplicates_by_imdb_id(trakt_watch_history)
-            
+                       
             # Get trakt and imdb data and filter out items with missing imdb id
             trakt_ratings = [rating for rating in trakt_ratings if rating.get('IMDB_ID') is not None]
             imdb_ratings = [rating for rating in imdb_ratings if rating.get('IMDB_ID') is not None]
@@ -305,6 +300,9 @@ def main():
             imdb_watchlist = [item for item in imdb_watchlist if item.get('IMDB_ID') is not None]
             trakt_watch_history = [item for item in trakt_watch_history if item.get('IMDB_ID') is not None]
             imdb_watch_history = [item for item in imdb_watch_history if item.get('IMDB_ID') is not None]
+            
+            # Remove unknown Types from review lists
+            imdb_reviews, trakt_reviews = EH.remove_unknown_types(imdb_reviews, trakt_reviews)
                        
             # Update outdated IMDB_IDs from trakt lists based on matching Title and Type comparison
             trakt_ratings, imdb_ratings, driver, wait = EH.update_outdated_imdb_ids_from_trakt(trakt_ratings, imdb_ratings, driver, wait)
@@ -727,32 +725,37 @@ def main():
                                 # Wait until rate button is located and scroll to it
                                 button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
                                 # driver.execute_script("arguments[0].scrollIntoView(true);", button)
-
+                                
                                 # click on "Rate" button and select rating option, then submit rating
-                                button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')))
-                                element_rating_bar = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"]')
-                                if element_rating_bar:
-                                    try:
-                                        has_existing_rating = button.find_element(By.CSS_SELECTOR, '[data-testid*="hero-rating-bar__user-rating__"] span')
-                                        existing_rating = int(has_existing_rating.text.strip())
-                                    except NoSuchElementException:
-                                        existing_rating = None 
-                                        
-                                    if existing_rating != item["Rating"]:
-                                        driver.execute_script("arguments[0].click();", button)
-                                        rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
-                                        driver.execute_script("arguments[0].click();", rating_option_element)
-                                        submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
-                                        submit_element.click()
-                                        time.sleep(1)
-                                        
-                                        print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
-                                        
-                                    else:
-                                        error_message1 = f' - Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
-                                        error_message2 = f"   - Rating already exists on IMDB for this {item['Type']}. Rating: ({item['Rating']})"
-                                        EL.logger.error(error_message1)
-                                        EL.logger.error(error_message2)
+                                locator = (By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')
+                                button = wait.until(lambda d: (lambda el: el if el.get_attribute("aria-disabled") == "false" else False)(d.find_element(*locator)))
+                                try:
+                                    has_existing_rating = button.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating__score"] span')
+                                    existing_rating_text = has_existing_rating.get_attribute("textContent").strip()
+                                    existing_rating = int(existing_rating_text)
+                                except NoSuchElementException:
+                                    existing_rating = None
+                                except ValueError as e:
+                                    error_message = f'There was a ValueError when attempting to get existing rating for for this item {item["Type"]}. See error log for details. Script will still attempt to rate this {item["Type"]}. : ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
+                                    print(error_message)
+                                    existing_rating = None
+                                    EL.logger.error(error_message, exc_info=True)
+                                    
+                                if existing_rating != item["Rating"]:
+                                    button = driver.find_element(By.CSS_SELECTOR, '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn')
+                                    driver.execute_script("arguments[0].click();", button)
+                                    rating_option_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f'button[aria-label="Rate {item["Rating"]}"]')))
+                                    driver.execute_script("arguments[0].click();", rating_option_element)
+                                    submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
+                                    driver.execute_script("arguments[0].click();", submit_element)
+                                    time.sleep(1)
+                                    
+                                    print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
+                                    
+                                else:
+                                    error_message1 = f' - Rating already exists on IMDB for this {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
+                                    print(error_message1)
+                                    EL.logger.error(error_message1)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 
@@ -854,7 +857,7 @@ def main():
                     # Set IMDB Reviews
                     if imdb_reviews_to_set:
                         # Call the check_last_run() function
-                        if check_imdb_reviews_last_submitted():
+                        if VC.check_imdb_reviews_last_submitted():
                             print('Setting IMDB Reviews')
                             
                             # Count the total number of items
@@ -873,8 +876,6 @@ def main():
                                         episode_title = f'[S{season_number}E{episode_number}] '
                                     else:
                                         episode_title = ''
-                                
-                                    print(f" - Submitting review ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
                                     
                                     # Load page
                                     success, status_code, url, driver, wait = EH.get_page_with_retries(f'https://contribute.imdb.com/review/{item["IMDB_ID"]}/add?bus=imdb', driver, wait)
@@ -882,25 +883,45 @@ def main():
                                         # Page failed to load, raise an exception
                                         raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                                     
-                                    review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.klondike-input")))
-                                    review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.klondike-textarea")))
+                                    # wait for input dom elements to fully load
+                                    time.sleep(3)
+                                    
+                                    review_title_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#text-input__0")))
+                                    review_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#textarea__0")))
+                                    
+                                    existing_title = review_title_input.get_attribute("value") or ""
+                                    existing_review = review_input.get_attribute("value") or ""
+                                    
+                                    # Skip submission if review title or review body already contains text
+                                    if existing_title.strip() or existing_review.strip():
+                                        print(f"   - Skipped setting review for {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']}) — a review already exists for this item")
+                                        continue
+                                    
+                                    # Clear old review inputs if review already exists
+                                    driver.execute_script("arguments[0].click();", review_title_input)
+                                    review_title_input.send_keys(Keys.CONTROL + "a", Keys.DELETE)
+                                    driver.execute_script("arguments[0].click();", review_input)
+                                    review_input.send_keys(Keys.CONTROL + "a", Keys.DELETE)
                                     
                                     review_title_input.send_keys("My Review")
                                     review_input.send_keys(item["Comment"])
                                     
-                                    no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(2)")))
-                                    yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "ul.klondike-userreview-spoiler li:nth-child(1)")))
+                                    no_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#is_spoiler-1")))
+                                    yes_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#is_spoiler-0")))
                                     
                                     if item["Spoiler"]:
-                                        yes_element.click()                        
+                                        driver.execute_script("arguments[0].click();", yes_element)
                                     else:
-                                        no_element.click()
+                                        driver.execute_script("arguments[0].click();", no_element)
                                                             
-                                    submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input.a-button-input[type='submit']")))
+                                    submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[aria-label='Submit']")))
 
-                                    submit_button.click()
+                                    driver.execute_script("arguments[0].click();", submit_button)
                                     
                                     time.sleep(3) # wait for rating to submit
+                                    
+                                    print(f" - Submitted review ({item_count} of {num_items}): {episode_title}{item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})")
+                                    
                                 except (NoSuchElementException, TimeoutException, PageLoadException):
                                     error_message = f"Failed to submit review ({item_count} of {num_items}): {item['Title']} ({item['Year']}) on IMDB ({item['IMDB_ID']})"
                                     print(f"   - {error_message}")
@@ -1209,9 +1230,9 @@ def main():
                                 
                                 driver.execute_script("arguments[0].click();", watch_history_button)
                                 
-                                watch_history_button = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                watch_history_button = wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Your check-ins')]")))
                                 
-                                watch_history_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Your Check-Ins')]")))
+                                watch_history_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Your check-ins')]")))
                                                                 
                                 # Check if item is already in watch history otherwise skip it
                                 if 'true' not in watch_history_button.get_attribute('data-titleinlist'):
@@ -1282,7 +1303,7 @@ def main():
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                 # Click reference view checkbox
-                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='ttdp']")))
+                reference_checkbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id*='reference-view-toggle']")))
                 driver.execute_script("arguments[0].click();", reference_checkbox)
                 # Submit
                 submit = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".article input[type*='submit']")))
@@ -1312,4 +1333,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

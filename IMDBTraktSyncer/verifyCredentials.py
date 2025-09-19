@@ -2,7 +2,7 @@ import os
 import json
 import sys
 import datetime
-from datetime import timedelta
+from datetime import timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import authTrakt
@@ -22,7 +22,7 @@ def prompt_get_credentials():
         "trakt_client_secret": "empty",
         "trakt_access_token": "empty",
         "trakt_refresh_token": "empty",
-        "last_trakt_token_refresh": "empty",
+        "trakt_token_expires": "empty",
         "imdb_username": "empty",
         "imdb_password": "empty"
     }
@@ -44,7 +44,7 @@ def prompt_get_credentials():
     
     # Prompt user for missing credentials, excluding tokens
     for key, value in values.items():
-        if value == "empty" and key not in ["trakt_access_token", "trakt_refresh_token", "last_trakt_token_refresh"]:
+        if value == "empty" and key not in ["trakt_access_token", "trakt_refresh_token", "trakt_token_expires"]:
             if key == "imdb_username":
                 prompt_message = f"Please enter a value for {key} (email or phone number): "
             elif key == "trakt_client_id":
@@ -61,32 +61,30 @@ def prompt_get_credentials():
             values[key] = input(prompt_message).strip()
 
     # Handle token refresh if necessary
-    last_trakt_token_refresh = values.get("last_trakt_token_refresh", "empty")
     should_refresh = True
-    if last_trakt_token_refresh != "empty":
+    trakt_token_expires = values.get("trakt_token_expires", "empty")
+    
+    if trakt_token_expires != "empty":
         try:
-            last_trakt_token_refresh_time = datetime.datetime.fromisoformat(last_trakt_token_refresh)
-            if datetime.datetime.now() - last_trakt_token_refresh_time < timedelta(days=7):
+            expiration_time = datetime.datetime.fromisoformat(trakt_token_expires).replace(tzinfo=timezone.utc)
+            if datetime.datetime.now(timezone.utc) < expiration_time:
                 should_refresh = False
         except ValueError:
-            pass  # Invalid date format, treat as refresh needed
-
+            pass  # Invalid date format, force refresh
+    
     if should_refresh:
-        trakt_access_token = None
-        trakt_refresh_token = None
         client_id = values["trakt_client_id"]
         client_secret = values["trakt_client_secret"]
+        refresh_token = values.get("trakt_refresh_token", "empty")
 
-        if "trakt_refresh_token" in values and values["trakt_refresh_token"] != "empty":
-            trakt_access_token = values["trakt_refresh_token"]
-            trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret, trakt_access_token)
+        if refresh_token != "empty":
+            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id, client_secret, refresh_token)
         else:
-            trakt_access_token, trakt_refresh_token = authTrakt.authenticate(client_id, client_secret)
-
-        # Update tokens and last refresh time
-        values["trakt_access_token"] = trakt_access_token
-        values["trakt_refresh_token"] = trakt_refresh_token
-        values["last_trakt_token_refresh"] = datetime.datetime.now().isoformat()
+            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id, client_secret)
+        
+        values["trakt_access_token"] = access_token
+        values["trakt_refresh_token"] = refresh_token
+        values["trakt_token_expires"] = expiration_time
 
     # Merge updated credentials back into the file data
     file_data.update(values)

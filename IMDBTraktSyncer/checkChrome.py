@@ -1,5 +1,4 @@
 import os
-import requests
 import zipfile
 import shutil
 import platform
@@ -7,10 +6,8 @@ import sys
 import time
 import subprocess
 import stat
+from requests.exceptions import RequestException
 from pathlib import Path
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
 
@@ -266,160 +263,192 @@ def is_chromedriver_up_to_date(main_directory, current_version):
     print(f"Chromedriver binary not found under {chromedriver_dir}.")
     return False
 
-def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=60):
+def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=60, max_retries=3):
     zip_path = Path(main_directory) / f"chrome-{version}.zip"
     extract_path = Path(main_directory) / "Chrome" / version
 
     # Ensure the main directory exists
     Path(main_directory).mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Download the zip file directly to the main directory
-        response = EH.make_request_with_retries(download_url, stream=True)
-        response.raise_for_status()
-
-        # Get the expected file size from the response headers (if available)
-        expected_file_size = int(response.headers.get('Content-Length', 0))
-        print(f" - Expected file size: {expected_file_size} bytes")
-
-        # Write the zip file to the final location
-        with open(zip_path, "wb") as zip_file:
-            for chunk in response.iter_content(chunk_size=8192):
-                zip_file.write(chunk)
-
-        # Final wait to ensure the download is complete before extracting
-        time.sleep(wait_interval)
-        
-        # Validate the downloaded file size
-        actual_file_size = zip_path.stat().st_size
-        print(f" - Downloaded file size: {actual_file_size} bytes")
-
-        if expected_file_size and actual_file_size != expected_file_size:
-            raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
-
-        # Verify the integrity of the ZIP file before extraction
-        if not zipfile.is_zipfile(zip_path):
-            raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
-
-        # Extract the zip file
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_path)
-
-        print(f" - Extraction complete to: {extract_path}")
-        
-        # Remove read-only attribute from the extracted folder
-        grant_permissions(extract_path)
-
-    except Exception as e:
-        raise RuntimeError(f" - Failed to download or extract Chrome version {version}: {e}")
-
-    finally:
-        # Cleanup the ZIP file
+    retries = 0
+    while retries <= max_retries:
         try:
-            if zip_path.exists():
-                zip_path.unlink()
-                print(f" - File {zip_path} deleted.")
+            # Download the zip file directly to the main directory
+            response = EH.make_request_with_retries(download_url, stream=True)
+            response.raise_for_status()
 
-            # Remove any stray .zip files in the directory
-            for file in Path(main_directory).glob("*.zip"):
-                if "chrome-" in file.name.lower():
-                    try:
-                        file.unlink()
-                        print(f" - Deleted file: {file}")
-                    except Exception as e:
-                        print(f" - Failed to delete file {file}: {e}")
+            # Get the expected file size from the response headers (if available)
+            expected_file_size = int(response.headers.get('Content-Length', 0))
+            print(f" - Expected file size: {expected_file_size} bytes")
 
-        except PermissionError:
-            print(f" - Permission denied when trying to delete {zip_path}. Ensure no other process is using it.")
+            # Write the zip file to the final location
+            with open(zip_path, "wb") as zip_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    zip_file.write(chunk)
+
+            # Final wait to ensure the download is complete before extracting
+            time.sleep(wait_interval)
+            
+            # Validate the downloaded file size
+            actual_file_size = zip_path.stat().st_size
+            print(f" - Downloaded file size: {actual_file_size} bytes")
+
+            if expected_file_size and actual_file_size != expected_file_size:
+                raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
+
+            # Verify the integrity of the ZIP file before extraction
+            if not zipfile.is_zipfile(zip_path):
+                raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
+
+            # Extract the zip file
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(extract_path)
+
+            print(f" - Extraction complete to: {extract_path}")
+            
+            # Remove read-only attribute from the extracted folder
+            grant_permissions(extract_path)
+        
+            # Break the retry loop if successful
+            break
+
+        except (RequestException, RuntimeError, zipfile.BadZipFile) as e:
+            retries += 1
+            print(f" - Retry {retries}/{max_retries} due to error: {e}")
+            if retries > max_retries:
+                raise RuntimeError(f" - Failed to download or extract Chromedriver version {version} after {max_retries} retries: {e}")
+            time.sleep(wait_interval)  # Wait before retrying
+
         except Exception as e:
-            print(f" - Unexpected error while deleting {zip_path}: {e}")
+            retries += 1
+            print(f" - Unexpected error occurred: {e}. Retry {retries}/{max_retries}")
+            if retries > max_retries:
+                raise RuntimeError(f" - Failed to download or extract Chromedriver version {version} due to an unexpected error after {max_retries} retries: {e}")
+            time.sleep(wait_interval)  # Wait before retrying
+
+        finally:
+            # Cleanup the ZIP file
+            try:
+                if zip_path.exists():
+                    zip_path.unlink()
+                    print(f" - File {zip_path} deleted.")
+
+                # Remove any stray .zip files in the directory
+                for file in Path(main_directory).glob("*.zip"):
+                    if "chrome-" in file.name.lower():
+                        try:
+                            file.unlink()
+                            print(f" - Deleted file: {file}")
+                        except Exception as e:
+                            print(f" - Failed to delete file {file}: {e}")
+
+            except PermissionError:
+                print(f" - Permission denied when trying to delete {zip_path}. Ensure no other process is using it.")
+            except Exception as e:
+                print(f" - Unexpected error while deleting {zip_path}: {e}")
 
     return extract_path
     
-def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=300, wait_interval=60):
+def download_and_extract_chromedriver(download_url, main_directory, version, max_wait_time=300, wait_interval=60, max_retries=3):
     zip_path = Path(main_directory) / f"chromedriver-{version}.zip"
     extract_path = Path(main_directory) / "Chromedriver" / version
 
     # Ensure the main directory exists
     Path(main_directory).mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Download the zip file directly to the main directory
-        response = EH.make_request_with_retries(download_url, stream=True)
-        response.raise_for_status()
-
-        # Get the expected file size from the response headers (if available)
-        expected_file_size = int(response.headers.get('Content-Length', 0))
-        print(f" - Expected file size: {expected_file_size} bytes")
-
-        # Write the zip file to the final location
-        with open(zip_path, "wb") as zip_file:
-            for chunk in response.iter_content(chunk_size=8192):
-                zip_file.write(chunk)
-
-        # Final wait to ensure the download is complete before extracting
-        time.sleep(wait_interval)
-        
-        # Validate the downloaded file size
-        actual_file_size = zip_path.stat().st_size
-        print(f" - Downloaded file size: {actual_file_size} bytes")
-
-        if expected_file_size and actual_file_size != expected_file_size:
-            raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
-
-        # Verify the integrity of the ZIP file before extraction
-        if not zipfile.is_zipfile(zip_path):
-            raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
-
-        # Extract the zip file
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_path)
-
-        print(f" - Extraction complete to: {extract_path}")
-        
-        # Remove read-only attribute from the extracted folder
-        grant_permissions(extract_path)
-
-    except Exception as e:
-        raise RuntimeError(f" - Failed to download or extract Chromedriver version {version}: {e}")
-
-    finally:
-        # Clean up extracted files (excluding the chromedriver executable)
+    retries = 0
+    while retries <= max_retries:
         try:
-            # Get the path to the extracted directory
-            chromedriver_dir = Path(extract_path)
+            # Download the zip file directly to the main directory
+            response = EH.make_request_with_retries(download_url, stream=True)
+            response.raise_for_status()
 
-            # Clean up all files except the chromedriver executable
-            if chromedriver_dir.exists():
-                for item in chromedriver_dir.iterdir():
-                    # Check if the item is a subfolder (assumed to be the one containing the binary files)
-                    if item.is_dir():
-                        subfolder = item
-                        # Now, clean up files inside the subfolder
-                        for sub_item in subfolder.iterdir():
-                            # Skip deleting chromedriver executable
-                            if sub_item.name.lower() in ["chromedriver.exe", "chromedriver"]:
-                                continue
-                            try_remove(sub_item)  # Remove other files
+            # Get the expected file size from the response headers (if available)
+            expected_file_size = int(response.headers.get('Content-Length', 0))
+            print(f" - Expected file size: {expected_file_size} bytes")
 
-            # Cleanup the ZIP file
-            if zip_path.exists():
-                zip_path.unlink()
-                print(f" - File {zip_path} deleted.")
+            # Write the zip file to the final location
+            with open(zip_path, "wb") as zip_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    zip_file.write(chunk)
 
-            # Remove any stray .zip files in the directory
-            for file in Path(main_directory).glob("*.zip"):
-                if "chromedriver-" in file.name.lower():
-                    try:
-                        file.unlink()
-                        print(f" - Deleted file: {file}")
-                    except Exception as e:
-                        print(f" - Failed to delete file {file}: {e}")
+            # Final wait to ensure the download is complete before extracting
+            time.sleep(wait_interval)
+            
+            # Validate the downloaded file size
+            actual_file_size = zip_path.stat().st_size
+            print(f" - Downloaded file size: {actual_file_size} bytes")
 
-        except PermissionError:
-            print(f" - Permission denied when trying to delete {zip_path}. Ensure no other process is using it.")
+            if expected_file_size and actual_file_size != expected_file_size:
+                raise RuntimeError(f" - Downloaded file size mismatch: expected {expected_file_size} bytes, got {actual_file_size} bytes")
+
+            # Verify the integrity of the ZIP file before extraction
+            if not zipfile.is_zipfile(zip_path):
+                raise RuntimeError(f" - The downloaded file is not a valid ZIP archive: {zip_path}")
+
+            # Extract the zip file
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(extract_path)
+
+            print(f" - Extraction complete to: {extract_path}")
+            
+            # Remove read-only attribute from the extracted folder
+            grant_permissions(extract_path)
+            
+            # Break the retry loop if successful
+            break
+        
+        except (RequestException, RuntimeError, zipfile.BadZipFile) as e:
+            retries += 1
+            print(f" - Retry {retries}/{max_retries} due to error: {e}")
+            if retries > max_retries:
+                raise RuntimeError(f" - Failed to download or extract Chromedriver version {version} after {max_retries} retries: {e}")
+            time.sleep(wait_interval)  # Wait before retrying
+
         except Exception as e:
-            print(f" - Unexpected error while deleting {zip_path}: {e}")
+            retries += 1
+            print(f" - Unexpected error occurred: {e}. Retry {retries}/{max_retries}")
+            if retries > max_retries:
+                raise RuntimeError(f" - Failed to download or extract Chromedriver version {version} due to an unexpected error after {max_retries} retries: {e}")
+            time.sleep(wait_interval)  # Wait before retrying
+
+        finally:
+            # Clean up extracted files (excluding the chromedriver executable)
+            try:
+                # Get the path to the extracted directory
+                chromedriver_dir = Path(extract_path)
+
+                # Clean up all files except the chromedriver executable
+                if chromedriver_dir.exists():
+                    for item in chromedriver_dir.iterdir():
+                        # Check if the item is a subfolder (assumed to be the one containing the binary files)
+                        if item.is_dir():
+                            subfolder = item
+                            # Now, clean up files inside the subfolder
+                            for sub_item in subfolder.iterdir():
+                                # Skip deleting chromedriver executable
+                                if sub_item.name.lower() in ["chromedriver.exe", "chromedriver"]:
+                                    continue
+                                try_remove(sub_item)  # Remove other files
+
+                # Cleanup the ZIP file
+                if zip_path.exists():
+                    zip_path.unlink()
+                    print(f" - File {zip_path} deleted.")
+
+                # Remove any stray .zip files in the directory
+                for file in Path(main_directory).glob("*.zip"):
+                    if "chromedriver-" in file.name.lower():
+                        try:
+                            file.unlink()
+                            print(f" - Deleted file: {file}")
+                        except Exception as e:
+                            print(f" - Failed to delete file {file}: {e}")
+
+            except PermissionError:
+                print(f" - Permission denied when trying to delete {zip_path}. Ensure no other process is using it.")
+            except Exception as e:
+                print(f" - Unexpected error while deleting {zip_path}: {e}")
 
     return extract_path
 
