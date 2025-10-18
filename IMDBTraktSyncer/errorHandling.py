@@ -661,8 +661,7 @@ def check_if_watch_history_limit_reached(size):
     
     '''
     # Define the file path for credentials.txt
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = VC.get_credentials_file_path()
     
     # Load the credentials file
     credentials = {}
@@ -711,8 +710,7 @@ def check_if_watchlist_limit_reached(size):
         bool: True if the watchlist limit has been reached, False otherwise.
     """
     # Define the file path for credentials.txt
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = VC.get_credentials_file_path()
     
     # Load the credentials file
     credentials = {}
