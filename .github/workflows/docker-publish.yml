@@ -2,11 +2,11 @@ name: Docker
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
     # Publish semver tags as releases.
     tags: ["v*.*.*"]
   pull_request:
-    branches: ["master"]
+    branches: ["main"]
 
 env:
   REGISTRY: ghcr.io
