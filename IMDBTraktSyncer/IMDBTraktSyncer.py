@@ -15,6 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import arguments
+from IMDBTraktSyncer.checkChrome import get_main_directory
 
 class PageLoadException(Exception):
     pass
@@ -64,7 +65,7 @@ def main():
         
         try:
             # Print credentials directory
-            VC.print_directory(main_directory)
+            VC.print_directory()
             
             # Get credentials
             _, _, _, _, imdb_username, imdb_password = VC.prompt_get_credentials()
@@ -81,13 +82,13 @@ def main():
             browser_type, headless = CC.get_browser_type()
 
             # Set up directory for downloads
-            directory = os.path.dirname(os.path.realpath(__file__))
+            directory = get_main_directory()
 
             # Start WebDriver
             print('Starting WebDriver...')
             
-            chrome_binary_path  = CC.get_chrome_binary_path(directory)
-            chromedriver_binary_path  = CC.get_chromedriver_binary_path(directory)
+            chrome_binary_path  = CC.get_chrome_binary_path()
+            chromedriver_binary_path  = CC.get_chromedriver_binary_path()
             user_data_directory = CC.get_user_data_directory()
             
             # Initialize Chrome options
