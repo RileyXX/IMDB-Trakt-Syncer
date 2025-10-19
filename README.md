@@ -98,6 +98,23 @@ IMDBTraktSyncer --clear-user-data --clear-cache
 6. Follow the prompts during the first run. You will need to enter your Trakt `client ID` and `client secret` from step 3, as well as your IMDB `username` and `password`. Please note that these details are saved insecurely as `credentials.txt` in the same folder as the script. It is recommended to change your IMDB password to something unique beforehand.
 7. Setup is complete. The script will continue running and syncing your ratings. You can monitor its progress in the command line. See below for [setting up automation](https://github.com/RileyXX/IMDB-Trakt-Syncer#for-setting-up-automation-see-the-following-wiki-pages).
 
+## Docker Installation Method
+1. Install [Docker](https://www.docker.com/get-started/) and [Docker Compose](https://docs.docker.com/compose/install/) if not already installed.
+2. Create a `compose.yml` file with the following content:
+
+```yaml
+services:
+  imdb-trakt-syncer:
+    image: ghcr.io/rileyxx/imdb-trakt-syncer
+    volumes:
+      - ./data/config:/config
+      - ./data/downloads:/app/downloads
+```
+
+3. Run `docker compose run --rm imdb-trakt-syncer` and configure the script by following the prompts.
+4. Once configuration is complete, run `docker compose up -d imdb-trakt-syncer` to start the container in detached mode.
+5. To view logs, run `docker compose logs imdb-trakt-syncer`.
+
 ## For Setting Up Automation See the Following Wiki Pages:
 - Setup Automation for:
    - [Windows](https://github.com/RileyXX/IMDB-Trakt-Syncer/wiki/Setting-Up-Automation-on-Windows)

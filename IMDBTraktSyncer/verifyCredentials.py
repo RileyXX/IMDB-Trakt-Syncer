@@ -8,13 +8,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import authTrakt
 from IMDBTraktSyncer import errorLogger as EL
 
-def print_directory(main_directory):
-    print(f"Your settings are saved at:\n{main_directory}")
+def get_config_directory():
+    return os.environ.get("CONFIG_DIR") or os.path.abspath(os.path.dirname(__file__))
+
+def get_credentials_file_path():
+    here = get_config_directory()
+    return os.path.join(here, "credentials.txt")
+
+def print_directory():
+    print(f"Your settings are saved at:\n{get_config_directory()}\n")
 
 def prompt_get_credentials():
     # Define the file path
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Default values for missing credentials
     default_values = {
@@ -101,8 +107,7 @@ def prompt_sync_ratings():
     Prompts the user to enable or disable syncing of ratings and updates the credentials file accordingly.
     """
     # Define the file path
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Initialize credentials dictionary
     credentials = {}
@@ -149,8 +154,7 @@ def prompt_sync_watchlist():
     Reads and writes to the credentials file only when necessary.
     """
     # Define the file path
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Load credentials file if it exists
     credentials = {}
@@ -182,7 +186,7 @@ def prompt_sync_watchlist():
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
             json.dump(credentials, file, indent=4, separators=(', ', ': '))
-    except Exception as e:
+    except Exception:
         logging.error("Failed to write to credentials file.", exc_info=True)
         raise
 
@@ -195,8 +199,7 @@ def prompt_sync_watch_history():
     credentials file only when necessary.
     """
     # Define the file path
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Load credentials file if it exists
     credentials = {}
@@ -243,8 +246,7 @@ def prompt_mark_rated_as_watched():
     credentials file only when necessary.
     """
     # Define the file path
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Load credentials file if it exists
     credentials = {}
@@ -291,7 +293,7 @@ def check_imdb_reviews_last_submitted():
         bool: True if 240 hours have passed, otherwise False.
     """
     # Define file path
-    file_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Initialize default credentials
     credentials = {}
@@ -337,7 +339,7 @@ def prompt_sync_reviews():
         bool: True if user wants to sync reviews, False otherwise.
     """
     # Define the file path
-    file_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Attempt to read the sync_reviews value from the credentials file
     try:
@@ -384,8 +386,7 @@ def prompt_remove_watched_from_watchlists():
     Reads and updates the decision in a credentials file to avoid repeated prompting.
     """
     # Define the file path for credentials
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Attempt to read the existing configuration
     try:
@@ -432,8 +433,7 @@ def prompt_remove_watchlist_items_older_than_x_days():
     Reads and updates the decision and the number of days in a credentials file to avoid repeated prompting.
     """
     # Define the file path for credentials
-    here = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(here, 'credentials.txt')
+    file_path = get_credentials_file_path()
 
     # Attempt to read the existing configuration
     try:
