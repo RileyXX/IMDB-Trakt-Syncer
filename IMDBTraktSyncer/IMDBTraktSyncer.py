@@ -155,7 +155,7 @@ def main():
                 time.sleep(2)
                 
                 # Load sign in page
-                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/registration/signin', driver, wait)
+                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/registration/signin/?subPageType=sign_in', driver, wait)
                 if not success:
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
