@@ -215,7 +215,7 @@ def get_imdb_watchlist(driver, wait, directory):
             # Create a mapping from header names to their index
             header_index = {column_name: index for index, column_name in enumerate(header)}
             
-            required_columns = ["Title", "Year", "Const", "Created", "Title Type"]
+            required_columns = ["Title", "Year", "Const", "Title Type"]
             missing_columns = [col for col in required_columns if col not in header_index]
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
@@ -226,10 +226,13 @@ def get_imdb_watchlist(driver, wait, directory):
                 year = row[header_index['Year']]
                 year = int(year) if year else None
                 imdb_id = row[header_index['Const']]
-                date_added = row[header_index['Created']]
+                if 'Created' in header_index and row[header_index['Created']]:
+                    date_added = datetime.strptime(
+                        row[header_index['Created']], '%Y-%m-%d'
+                    ).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                else:
+                    date_added = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
                 media_type = row[header_index['Title Type']]
-                # Convert date format
-                date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
                 if media_type in ["TV Series", "TV Mini Series"]:
                     media_type = "show"
                 elif media_type == "TV Episode":
@@ -370,7 +373,7 @@ def get_imdb_checkins(driver, wait, directory):
             # Create a mapping from header names to their index
             header_index = {column: index for index, column in enumerate(header)}
             
-            required_columns = ["Title", "Year", "Const", "Created", "Title Type"]
+            required_columns = ["Title", "Year", "Const", "Title Type"]
             missing_columns = [col for col in required_columns if col not in header_index]
             if missing_columns:
                 raise ValueError(f"Required columns missing from CSV file: {', '.join(missing_columns)}")
@@ -381,10 +384,13 @@ def get_imdb_checkins(driver, wait, directory):
                 year = row[header_index['Year']]
                 year = int(year) if year else None
                 imdb_id = row[header_index['Const']]
-                date_added = row[header_index['Created']]
+                if 'Created' in header_index and row[header_index['Created']]:
+                    date_added = datetime.strptime(
+                        row[header_index['Created']], '%Y-%m-%d'
+                    ).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                else:
+                    date_added = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
                 media_type = row[header_index['Title Type']]
-                # Convert date format
-                date_added = datetime.strptime(date_added, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%S.000Z')
                 if media_type in ["TV Series", "TV Mini Series"]:
                     media_type = "show"
                 elif media_type == "TV Episode":
@@ -550,4 +556,5 @@ def get_imdb_reviews(driver, wait, directory):
             filtered_reviews.append(item)
     imdb_reviews = filtered_reviews
     
+
     return imdb_reviews, errors_found_getting_imdb_reviews, driver, wait
