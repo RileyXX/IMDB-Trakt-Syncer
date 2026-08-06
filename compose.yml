@@ -1,0 +1,6 @@
+services:
+  imdbtraktsyncer:
+    build: .
+    volumes:
+      - ./data/config:/config
+      - ./data/downloads:/app/downloads

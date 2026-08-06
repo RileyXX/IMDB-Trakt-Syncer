@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
 
 def get_main_directory():
-    directory = os.path.dirname(os.path.realpath(__file__))
+    directory = os.environ.get("DOWNLOAD_DIR") or os.path.dirname(os.path.realpath(__file__))
     return directory
     
 def get_browser_type():
@@ -121,7 +121,7 @@ def grant_permissions(path: Path):
                 print(f"Error modifying permissions for {item_path}: {e}")
 
 def get_user_data_directory():
-    directory = os.path.dirname(os.path.realpath(__file__))  # Current script's directory
+    directory = get_main_directory()  # Current script's directory
     version = get_latest_stable_version()  # Assuming this function exists and returns a version string
 
     # Path to the version directory
@@ -496,7 +496,8 @@ def remove_old_versions(main_directory, latest_version, browser_type):
             print(f"Removing old Chromedriver version: {version_dir.name}...")
             try_remove(version_dir)
 
-def get_chrome_binary_path(main_directory):
+def get_chrome_binary_path():
+    main_directory = get_main_directory()
     version = get_latest_stable_version()
 
     # Build the path to the version directory
@@ -542,7 +543,8 @@ def get_chrome_binary_path(main_directory):
 
     raise FileNotFoundError(f"No valid Chrome binary found for platform {platform_key} in {chrome_dir}")
     
-def get_chromedriver_binary_path(main_directory):
+def get_chromedriver_binary_path():
+    main_directory = get_main_directory()
     version = get_latest_stable_version()
 
     chromedriver_dir = Path(main_directory) / "Chromedriver" / version

@@ -6,6 +6,8 @@ import os
 import platform
 import stat
 
+from IMDBTraktSyncer.verifyCredentials import get_credentials_file_path
+
 def try_remove(file_path, retries=3, delay=1):
     """
     Tries to remove a file or directory, retrying if it's in use or read-only.
@@ -126,7 +128,7 @@ def clear_user_data(main_directory):
 
     :param main_directory: Directory path where credentials.txt and user data should be deleted.
     """
-    credentials_path = os.path.join(main_directory, "credentials.txt")
+    credentials_path = get_credentials_file_path()
 
     if os.path.exists(credentials_path):
         # Remove the credentials.txt file
