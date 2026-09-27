@@ -344,8 +344,13 @@ def main():
             imdb_watchlist_to_set = EH.filter_items(imdb_watchlist, trakt_watchlist, key="IMDB_ID")
             trakt_watchlist_to_set = EH.filter_items(trakt_watchlist, imdb_watchlist, key="IMDB_ID")
 
-            imdb_watch_history_to_set = EH.filter_items(imdb_watch_history, trakt_watch_history, key="IMDB_ID")
-            trakt_watch_history_to_set = EH.filter_items(trakt_watch_history, imdb_watch_history, key="IMDB_ID")
+            if sync_watch_history_value:
+                imdb_watch_history_to_set = EH.filter_items(imdb_watch_history, trakt_watch_history, key="IMDB_ID")
+                trakt_watch_history_to_set = EH.filter_items(trakt_watch_history, imdb_watch_history, key="IMDB_ID")
+            else:
+                # Watch history is still fetched for mark_rated_as_watched, but only rated items should be added below
+                imdb_watch_history_to_set = []
+                trakt_watch_history_to_set = []
             
             if mark_rated_as_watched_value:
                 # Combine Trakt and IMDB Ratings into one list
