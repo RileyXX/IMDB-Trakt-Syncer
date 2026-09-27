@@ -6,6 +6,7 @@ from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -14,6 +15,16 @@ from IMDBTraktSyncer import errorLogger as EL
 
 class PageLoadException(Exception):
     pass
+
+def get_export_button(driver, wait):
+    # Older list pages had a dedicated export button. Newer ones put "Export" inside the "Actions" menu.
+    try:
+        return WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+    except TimeoutException:
+        pass
+    actions_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='hero-list-subnav-actions-menu-button']")))
+    driver.execute_script("arguments[0].click();", actions_button)
+    return wait.until(EC.presence_of_element_located((By.XPATH, "//li[@role='menuitem'][.//span[normalize-space(text())='Export']]")))
 
 def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value):
     # Generate IMDB .csv exports
@@ -26,15 +37,15 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             # Scroll into view and click the button
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
         except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            # The list may be empty. If it is not, an older export from the exports page may be used instead.
+            print(" - Could not request a new IMDB watchlist export. An older export may be used if one exists.")
     
     # Generate ratings export if sync_ratings_value is True
     if sync_ratings_value or mark_rated_as_watched_value:
@@ -43,15 +54,15 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             # Scroll into view and click the button
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
         except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            # The list may be empty. If it is not, an older export from the exports page may be used instead.
+            print(" - Could not request a new IMDB ratings export. An older export may be used if one exists.")
     
     # Generate checkins export if sync_watch_history_value is True
     if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
@@ -61,14 +72,14 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
         except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            # The list may be empty. If it is not, an older export from the exports page may be used instead.
+            print(" - Could not request a new IMDB check-ins export. An older export may be used if one exists.")
     
     # Wait for export processing to finish
     # Function to check if any summary item contains "in progress"
