@@ -153,6 +153,33 @@ def get_trakt_message(status_code):
     }
     return error_messages.get(status_code, "Unknown error")
 
+def show_browser_for_verification(driver, wait, url):
+    """Reopen headless Chrome visibly using its existing profile and options."""
+    from copy import deepcopy
+    from selenium import webdriver
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    options = getattr(driver, '_syncer_chrome_options', None)
+    if options is None:
+        raise RuntimeError("Chrome launch options are unavailable; cannot show the verification window.")
+    if any(arg.startswith('--headless') for arg in options.arguments):
+        visible_options = deepcopy(options)
+        visible_options.arguments[:] = [
+            arg for arg in visible_options.arguments if not arg.startswith('--headless')
+        ]
+        service = driver.service
+        driver.quit()  # Release the profile before reopening it.
+        driver = webdriver.Chrome(service=service, options=visible_options)
+        driver._syncer_chrome_options = visible_options
+        driver._syncer_minimize_after_verification = True
+        driver.set_page_load_timeout(60)
+        wait = WebDriverWait(driver, 10)
+        driver.get(url)
+    else:
+        driver.maximize_window()
+    return driver, wait
+
+
 def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_time=5):
     total_time_spent = 0  # Track total elapsed time
     status_code = None
@@ -176,14 +203,33 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             # Attempt to load the page using Selenium driver
             driver.get(url)
 
+            # IMDb can require a manual challenge before serving the requested page.
+            if "human verification" in driver.title.lower():
+                driver, wait = show_browser_for_verification(driver, wait, driver.current_url)
+                print("   - IMDb requires human verification. Complete the challenge in the Chrome window.")
+                print("   - Waiting up to 5 minutes for verification...")
+                try:
+                    from selenium.webdriver.support.ui import WebDriverWait
+                    WebDriverWait(driver, 300).until(
+                        lambda d: "human verification" not in d.title.lower()
+                        and d.execute_script("return document.readyState;") == "complete"
+                    )
+                except TimeoutException:
+                    print("   - IMDb verification was not completed. Run the script again and complete the challenge in Chrome.")
+                    return False, None, driver.current_url, driver, wait
+
+                if getattr(driver, '_syncer_minimize_after_verification', False):
+                    driver.minimize_window()
+
             # Wait until the status code becomes available
             wait.until(lambda driver: driver.execute_script(
-                "return window.performance.getEntries().length > 0 && window.performance.getEntries()[0].responseStatus !== undefined"
+                "const navigation = window.performance.getEntriesByType('navigation')[0];"
+                "return navigation !== undefined && navigation.responseStatus !== undefined;"
             ))
 
             # Get the HTTP status code of the page using JavaScript
             status_code = driver.execute_script(
-                "return window.performance.getEntries()[0].responseStatus;"
+                "return window.performance.getEntriesByType('navigation')[0].responseStatus;"
             )
             
             # Update resolved_url with the current URL after potential redirects
@@ -208,8 +254,8 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
                 raise PageLoadException(f"Retryable HTTP error encountered: {status_code}")
             
             elif status_code >= 400:
-                print(f"   - Non-retryable error encountered. Status code: {status_code} Aborting.")
-                return False, status_code, url, driver, wait
+                print(f"   - Non-retryable page error. Status code: {status_code}. URL: {resolved_url}. Page title: {driver.title}. Aborting.")
+                return False, status_code, resolved_url, driver, wait
 
             else:
                 # Page loaded successfully
