@@ -15,8 +15,38 @@ from IMDBTraktSyncer import errorLogger as EL
 class PageLoadException(Exception):
     pass
 
+def click_imdb_export(driver, wait):
+    """Support the standalone Export button and the Actions menu layout."""
+    controls = "//*[self::button or self::a or @role='button' or @role='menuitem']"
+    export_locator = (By.XPATH, controls +
+        "[normalize-space(.)='Export' or @aria-label='Export']")
+    actions_locator = (By.XPATH, controls +
+        "[normalize-space(.)='Actions' or @aria-label='Actions']")
+    legacy_locator = (By.CSS_SELECTOR,
+        "[data-testid*='hero-list-subnav-export-button'] button, "
+        "button[data-testid*='hero-list-subnav-export-button']")
+
+    def find_control(d):
+        for locator, is_export in ((export_locator, True), (legacy_locator, True),
+                                   (actions_locator, False)):
+            for element in d.find_elements(*locator):
+                if element.is_displayed() and element.is_enabled():
+                    return element, is_export
+        return False
+
+    control, is_export = wait.until(find_control)
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", control)
+    control.click()
+    if not is_export:
+        export_button = wait.until(EC.element_to_be_clickable(export_locator))
+        export_button.click()
+    time.sleep(3)
+
+
 def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value):
     # Generate IMDB .csv exports
+    if not any((sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)):
+        return driver, wait
   
     # Generate watchlist export if sync_watchlist_value is True
     if sync_watchlist_value or remove_watched_from_watchlists_value:
@@ -26,15 +56,13 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-            # Scroll into view and click the button
-            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
-            wait.until(EC.visibility_of(export_button))
-            driver.execute_script("arguments[0].click();", export_button)
-            time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            click_imdb_export(driver, wait)
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Unable to find or use the IMDb watchlist Export button. "
+                "Check the list in the Chrome window and try exporting it manually. "
+                "Sync stopped because the list contents could not be verified."
+            ) from exc
     
     # Generate ratings export if sync_ratings_value is True
     if sync_ratings_value or mark_rated_as_watched_value:
@@ -43,15 +71,13 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-            # Scroll into view and click the button
-            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
-            wait.until(EC.visibility_of(export_button))
-            driver.execute_script("arguments[0].click();", export_button)
-            time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            click_imdb_export(driver, wait)
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Unable to find or use the IMDb ratings Export button. "
+                "Check the list in the Chrome window and try exporting it manually. "
+                "Sync stopped because the list contents could not be verified."
+            ) from exc
     
     # Generate checkins export if sync_watch_history_value is True
     if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
@@ -61,14 +87,13 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
-            driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
-            wait.until(EC.visibility_of(export_button))
-            driver.execute_script("arguments[0].click();", export_button)
-            time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+            click_imdb_export(driver, wait)
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Unable to find or use the IMDb check-ins Export button. "
+                "Check the list in the Chrome window and try exporting it manually. "
+                "Sync stopped because the list contents could not be verified."
+            ) from exc
     
     # Wait for export processing to finish
     # Function to check if any summary item contains "in progress"
@@ -92,8 +117,7 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Locate all elements with the selector
             summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
         except TimeoutException:
-            print("No items found when attempting to generate IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
-            break
+            raise RuntimeError("No IMDb exports were found after requesting them. Sync stopped; check https://www.imdb.com/exports/.")
 
         # Check if any summary item contains "in progress"
         if not check_in_progress(summary_items):
@@ -127,6 +151,8 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     """
     Download IMDB Exports and rename files with correct permissions.
     """
+    if not any((sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)):
+        return driver, wait
     # Load page
     success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
     if not success:
@@ -137,8 +163,7 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     try:
         summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
     except TimeoutException:
-        print("No items found when attempting to download IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
-        return driver, wait
+        raise RuntimeError("No IMDb exports are available to download. Sync stopped; check https://www.imdb.com/exports/.")
 
     # Helper function to find buttons for CSV downloads
     def find_button(item_text):
@@ -158,40 +183,49 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     ratings_csv_link = find_button("ratings") if sync_ratings_value or mark_rated_as_watched_value else None
     checkins_csv_link = find_button("check-ins") if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value else None
 
-    # Clear any previous csv files
-    for file in os.listdir(directory):
-        if file.endswith('.csv'):
-            os.remove(os.path.join(directory, file))
-
-    # Download each file and rename accordingly
-    file_mappings = [
-        (watchlist_csv_link, "watchlist.csv"),
-        (ratings_csv_link, "ratings.csv"),
-        (checkins_csv_link, "checkins.csv")
-    ]
+    # Every required export must be present before downloading any files.
+    file_mappings = []
+    if sync_watchlist_value or remove_watched_from_watchlists_value:
+        file_mappings.append((watchlist_csv_link, "watchlist.csv"))
+    if sync_ratings_value or mark_rated_as_watched_value:
+        file_mappings.append((ratings_csv_link, "ratings.csv"))
+    if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
+        file_mappings.append((checkins_csv_link, "checkins.csv"))
+    for csv_link, file_name in file_mappings:
+        if csv_link is None:
+            raise RuntimeError(
+                "Required IMDb export {} is unavailable. Generate it on IMDb and "
+                "wait for it to finish before rerunning. Sync stopped.".format(file_name)
+            )
     
     for csv_link, file_name in file_mappings:
-        if csv_link:
-            try:
-                driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
-                wait.until(EC.visibility_of(csv_link))
-                driver.execute_script("arguments[0].click();", csv_link)
-                time.sleep(10)  # wait for download to complete
-
-                downloaded_files = sorted(
-                    [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.csv')],
-                    key=os.path.getmtime,
-                    reverse=True
-                )
-
-                if downloaded_files:
-                    grant_permissions_and_rename_file(downloaded_files[0], file_name)
-                else:
-                    print(f"Unable to locate downloaded file for {file_name}")
-            except Exception as e:
-                print(f"Failed to download or rename file '{file_name}': {str(e)}")
-        else:
-            print(f"No export button found for '{file_name}', skipping...")
+        # Only accept a new download, never a CSV left over from a previous export.
+        previous_files = set(os.listdir(directory))
+        try:
+            driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
+            wait.until(EC.visibility_of(csv_link))
+            driver.execute_script("arguments[0].click();", csv_link)
+            deadline = time.monotonic() + 120
+            downloaded_file = None
+            while time.monotonic() < deadline:
+                new_csvs = [
+                    os.path.join(directory, name) for name in os.listdir(directory)
+                    if name not in previous_files and name.endswith('.csv')
+                ]
+                if len(new_csvs) > 1:
+                    raise RuntimeError("Multiple new CSV files appeared; cannot identify the export.")
+                if new_csvs:
+                    downloaded_file = new_csvs[0]
+                    break
+                time.sleep(1)
+            if downloaded_file is None:
+                raise RuntimeError("No new CSV download completed within 120 seconds.")
+            # Rename directly so filesystem failures stop the sync instead of being ignored.
+            os.replace(downloaded_file, os.path.join(directory, file_name))
+        except Exception as exc:
+            raise RuntimeError(
+                "Could not download IMDb export {}. Sync stopped.".format(file_name)
+            ) from exc
 
     return driver, wait
 

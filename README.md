@@ -61,6 +61,7 @@ Below is a list of available commands for this package, along with a brief descr
 | `--uninstall`             | Clears cached browsers and drivers before uninstalling.                                               |
 | `--clean-uninstall`       | Clears all cached data, including user credentials, cached browsers, and drivers before uninstalling. |
 | `--directory`             | Prints the package install directory.                                                                 |
+| `--use-existing-imdb-exports` | Downloads existing IMDb exports without requesting new ones. Generate fresh exports for every enabled list (watchlist, ratings, check-ins) on IMDb and wait for them to finish first. |
 
 ## Usage Example
 

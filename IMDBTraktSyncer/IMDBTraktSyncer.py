@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--uninstall", action="store_true", help="Clears cached browsers and drivers before uninstalling.")
     parser.add_argument("--clean-uninstall", action="store_true", help="Clears all cached data, inluding user credentials, cached browsers and drivers before uninstalling.")
     parser.add_argument("--directory", action="store_true", help="Prints the package install directory.")
+    parser.add_argument("--use-existing-imdb-exports", action="store_true", help="Downloads existing IMDb exports instead of generating new ones. Prepare fresh exports on IMDb before running.")
     
     args = parser.parse_args()
     
@@ -96,7 +97,6 @@ def main():
             options.add_argument(f"--user-data-dir={user_data_directory}")
             if headless == True:
                 options.add_argument("--headless=new")
-            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
                 "download.directory_upgrade": True,
@@ -128,6 +128,7 @@ def main():
             try:
                 # Initialize WebDriver with the given options and service
                 driver = webdriver.Chrome(service=service, options=options)
+                driver._syncer_chrome_options = options
                 driver.set_page_load_timeout(60)
 
             except Exception as e:
@@ -283,7 +284,10 @@ def main():
             
             # Get IMDB Data
             print('Processing IMDB Data')
-            driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
+            if args.use_existing_imdb_exports:
+                print('Using existing IMDb exports. These should reflect your current lists.')
+            else:
+                driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             driver, wait = imdbData.download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
             if sync_watchlist_value or remove_watched_from_watchlists_value:
                 imdb_watchlist, imdb_watchlist_size, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
