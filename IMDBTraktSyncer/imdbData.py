@@ -2,6 +2,7 @@ import os
 import time
 import csv
 import traceback
+import tempfile
 from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -15,8 +16,212 @@ from IMDBTraktSyncer import errorLogger as EL
 class PageLoadException(Exception):
     pass
 
+_EXISTING_IMDB_EXPORT_CACHE = {}
+
+def _get_existing_imdb_export(file_path, required_columns):
+    stat_result = os.stat(file_path)
+    signature = (stat_result.st_mtime_ns, stat_result.st_size)
+    cache_key = os.path.abspath(file_path)
+    cache_entry = _EXISTING_IMDB_EXPORT_CACHE.get(cache_key)
+    if cache_entry and cache_entry["signature"] == signature:
+        return cache_entry
+
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file)
+        has_header = reader.fieldnames is not None
+        fieldnames = reader.fieldnames or required_columns
+        missing_columns = [column for column in required_columns if column not in fieldnames]
+        if missing_columns:
+            raise ValueError(
+                f"Cannot update {os.path.basename(file_path)}; required columns are missing: "
+                f"{', '.join(missing_columns)}"
+            )
+        rows = list(reader)
+
+    rows_by_id = {}
+    for row in rows:
+        imdb_id = row.get("Const")
+        if imdb_id:
+            rows_by_id.setdefault(imdb_id, row)
+
+    cache_entry = {
+        "signature": signature,
+        "fieldnames": fieldnames,
+        "has_header": has_header,
+        "rows": rows,
+        "rows_by_id": rows_by_id
+    }
+    _EXISTING_IMDB_EXPORT_CACHE[cache_key] = cache_entry
+    return cache_entry
+
+def update_existing_imdb_export(directory, file_name, item):
+    export_columns = {
+        "watchlist.csv": ["Title", "Year", "Const", "Created", "Title Type"],
+        "ratings.csv": ["Title", "Year", "Your Rating", "Const", "Date Rated", "Title Type"],
+        "checkins.csv": ["Title", "Year", "Const", "Created", "Title Type"]
+    }
+    if file_name not in export_columns:
+        raise ValueError(f"Unsupported IMDb export file: {file_name}")
+
+    file_path = os.path.join(directory, file_name)
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"IMDb export file not found: {file_path}")
+    cache_entry = _get_existing_imdb_export(file_path, export_columns[file_name])
+    fieldnames = cache_entry["fieldnames"]
+    has_header = cache_entry["has_header"]
+    rows = cache_entry["rows"]
+    rows_by_id = cache_entry["rows_by_id"]
+
+    media_type = {
+        "movie": "Movie",
+        "show": "TV Series",
+        "episode": "TV Episode"
+    }.get(item.get("Type"), "")
+    imdb_id = item.get("IMDB_ID")
+    if not imdb_id:
+        raise ValueError(f"Cannot update {file_name} without an IMDb title ID.")
+    date_added = str(item.get("Date_Added") or datetime.now().strftime("%Y-%m-%d"))[:10]
+    new_row = {column: "" for column in fieldnames}
+    new_row.update({
+        "Title": item.get("Title") or "",
+        "Year": item.get("Year") or "",
+        "Const": imdb_id,
+        "Title Type": media_type
+    })
+    if file_name == "ratings.csv":
+        new_row["Your Rating"] = item.get("Rating") or ""
+        new_row["Date Rated"] = date_added
+    else:
+        new_row["Created"] = date_added
+
+    existing_row = rows_by_id.get(new_row["Const"])
+    if existing_row is not None:
+        updates = {
+            column: new_row[column]
+            for column in export_columns[file_name]
+        }
+        if all(existing_row.get(column) == value for column, value in updates.items()):
+            return
+        updated_row = dict(existing_row)
+        updated_row.update(updates)
+        rows_to_write = [
+            updated_row if row is existing_row else row
+            for row in rows
+        ]
+    else:
+        if "Position" in fieldnames:
+            new_row["Position"] = str(len(rows) + 1)
+        try:
+            with open(
+                file_path,
+                "a",
+                encoding="utf-8" if has_header else "utf-8-sig",
+                newline=""
+            ) as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
+                if not has_header:
+                    writer.writeheader()
+                writer.writerow(new_row)
+        except OSError as exc:
+            raise RuntimeError(f"Could not update IMDb export '{file_path}'.") from exc
+        cache_entry["has_header"] = True
+        rows.append(new_row)
+        rows_by_id[new_row["Const"]] = new_row
+        stat_result = os.stat(file_path)
+        cache_entry["signature"] = (stat_result.st_mtime_ns, stat_result.st_size)
+        return
+
+    temporary_file = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8-sig",
+            newline="",
+            dir=directory,
+            prefix=f".{file_name}-",
+            suffix=".tmp",
+            delete=False
+        ) as file:
+            temporary_file = file.name
+            writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows_to_write)
+        os.replace(temporary_file, file_path)
+    except OSError as exc:
+        raise RuntimeError(f"Could not update IMDb export '{file_path}'.") from exc
+    finally:
+        if temporary_file and os.path.exists(temporary_file):
+            os.remove(temporary_file)
+    existing_row.update(updates)
+    stat_result = os.stat(file_path)
+    cache_entry["signature"] = (stat_result.st_mtime_ns, stat_result.st_size)
+
+def get_export_button(driver, wait):
+    controls = "//*[self::button or self::a or @role='button' or @role='menuitem']"
+    text_contains_export = (
+        "contains(translate(normalize-space(.), "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'export')"
+    )
+    label_contains_export = (
+        "contains(translate(@aria-label, "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'export')"
+    )
+    testid_contains_export = (
+        "contains(translate(@data-testid, "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'export')"
+    )
+    export_locator = (
+        By.XPATH,
+        controls + f"[{text_contains_export} or {label_contains_export} or {testid_contains_export}]"
+    )
+    text_contains_actions = (
+        "contains(translate(normalize-space(.), "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'action')"
+    )
+    label_contains_actions = (
+        "contains(translate(@aria-label, "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'action')"
+    )
+    actions_locator = (
+        By.XPATH,
+        controls + (
+            f"[{text_contains_actions} or {label_contains_actions} "
+            "or @data-testid='hero-list-subnav-actions-menu-button']"
+        )
+    )
+    legacy_locator = (
+        By.CSS_SELECTOR,
+        "[data-testid*='hero-list-subnav-export-button'] button, "
+        "button[data-testid*='hero-list-subnav-export-button']"
+    )
+    actions_testid_locator = (
+        By.CSS_SELECTOR,
+        "button[data-testid='hero-list-subnav-actions-menu-button']"
+    )
+
+    def find_control(current_driver):
+        for locator, is_export in (
+            (export_locator, True),
+            (legacy_locator, True),
+            (actions_testid_locator, False),
+            (actions_locator, False)
+        ):
+            for element in current_driver.find_elements(*locator):
+                if element.is_displayed() and element.is_enabled():
+                    return element, is_export
+        return False
+
+    control, is_export = wait.until(find_control)
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", control)
+    if not is_export:
+        driver.execute_script("arguments[0].click();", control)
+        return wait.until(EC.element_to_be_clickable(export_locator))
+    return control
+
 def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value):
     # Generate IMDB .csv exports
+    if not any((sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)):
+        return driver, wait
   
     # Generate watchlist export if sync_watchlist_value is True
     if sync_watchlist_value or remove_watched_from_watchlists_value:
@@ -26,15 +231,16 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             # Scroll into view and click the button
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Could not request an IMDb watchlist export. Sync stopped to avoid using stale or incomplete data."
+            ) from exc
     
     # Generate ratings export if sync_ratings_value is True
     if sync_ratings_value or mark_rated_as_watched_value:
@@ -43,15 +249,16 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             # Page failed to load, raise an exception
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             # Scroll into view and click the button
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Could not request an IMDb ratings export. Sync stopped to avoid using stale or incomplete data."
+            ) from exc
     
     # Generate checkins export if sync_watch_history_value is True
     if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
@@ -61,14 +268,15 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
             raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
 
         try:
-            export_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[data-testid*='hero-list-subnav-export-button'] button")))
+            export_button = get_export_button(driver, wait)
             driver.execute_script("arguments[0].scrollIntoView(true);", export_button)
             wait.until(EC.visibility_of(export_button))
             driver.execute_script("arguments[0].click();", export_button)
             time.sleep(3)
-        except TimeoutException:
-            # print("Export button not found, possibly because the list is empty.")
-            pass
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "Could not request an IMDb check-ins export. Sync stopped to avoid using stale or incomplete data."
+            ) from exc
     
     # Wait for export processing to finish
     # Function to check if any summary item contains "in progress"
@@ -91,9 +299,10 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
         try:
             # Locate all elements with the selector
             summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
-        except TimeoutException:
-            print("No items found when attempting to generate IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
-            break
+        except TimeoutException as exc:
+            raise RuntimeError(
+                "No IMDb export jobs appeared after the export requests. Sync stopped; check https://www.imdb.com/exports/."
+            ) from exc
 
         # Check if any summary item contains "in progress"
         if not check_in_progress(summary_items):
@@ -107,26 +316,13 @@ def generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     
     return driver, wait
     
-def grant_permissions_and_rename_file(src_path, dest_name):
-    """
-    Grant full permissions to the file and rename it to the given name.
-    :param src_path: Path to the downloaded file.
-    :param dest_name: New name for the file (e.g., 'ratings.csv').
-    """
-    try:
-        # Grant full permissions
-        os.chmod(src_path, 0o777)
-        
-        # Rename the file
-        dest_path = os.path.join(os.path.dirname(src_path), dest_name)
-        os.rename(src_path, dest_path)
-    except Exception as e:
-        print(f"Error while renaming file {src_path} to {dest_name}: {e}")
-        
 def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value):
     """
     Download IMDB Exports and rename files with correct permissions.
     """
+    if not any((sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)):
+        return driver, wait
+
     # Load page
     success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/exports/', driver, wait)
     if not success:
@@ -136,9 +332,10 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     # Locate all export blocks
     try:
         summary_items = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ipc-metadata-list-summary-item")))
-    except TimeoutException:
-        print("No items found when attempting to download IMDB exports. Assuming no IMDB watchlist, ratings or check-ins to download.")
-        return driver, wait
+    except TimeoutException as exc:
+        raise RuntimeError(
+            "No IMDb exports are available to download. Sync stopped; check https://www.imdb.com/exports/."
+        ) from exc
 
     # Helper function to find buttons for CSV downloads
     def find_button(item_text):
@@ -147,7 +344,7 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
                 try:
                     button = item.find_element(By.CSS_SELECTOR, "button[data-testid*='export-status-button']")
                     return button
-                except Exception:
+                except NoSuchElementException:
                     print(f"Export button not found for '{item_text}' on IMDB exports page https://www.imdb.com/exports/")
                     return None
         print(f"No section found matching '{item_text}' on IMDB exports page https://www.imdb.com/exports/")
@@ -158,44 +355,126 @@ def download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ra
     ratings_csv_link = find_button("ratings") if sync_ratings_value or mark_rated_as_watched_value else None
     checkins_csv_link = find_button("check-ins") if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value else None
 
-    # Clear any previous csv files
-    for file in os.listdir(directory):
-        if file.endswith('.csv'):
-            os.remove(os.path.join(directory, file))
+    file_mappings = []
+    if sync_watchlist_value or remove_watched_from_watchlists_value:
+        file_mappings.append((watchlist_csv_link, "watchlist.csv"))
+    if sync_ratings_value or mark_rated_as_watched_value:
+        file_mappings.append((ratings_csv_link, "ratings.csv"))
+    if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
+        file_mappings.append((checkins_csv_link, "checkins.csv"))
 
-    # Download each file and rename accordingly
-    file_mappings = [
-        (watchlist_csv_link, "watchlist.csv"),
-        (ratings_csv_link, "ratings.csv"),
-        (checkins_csv_link, "checkins.csv")
-    ]
+    for csv_link, file_name in file_mappings:
+        if csv_link is None:
+            raise RuntimeError(
+                f"Required IMDb export '{file_name}' is unavailable. Sync stopped; check https://www.imdb.com/exports/."
+            )
     
     for csv_link, file_name in file_mappings:
-        if csv_link:
-            try:
-                driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
-                wait.until(EC.visibility_of(csv_link))
-                driver.execute_script("arguments[0].click();", csv_link)
-                time.sleep(10)  # wait for download to complete
-
-                downloaded_files = sorted(
-                    [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.csv')],
-                    key=os.path.getmtime,
-                    reverse=True
-                )
-
-                if downloaded_files:
-                    grant_permissions_and_rename_file(downloaded_files[0], file_name)
-                else:
-                    print(f"Unable to locate downloaded file for {file_name}")
-            except Exception as e:
-                print(f"Failed to download or rename file '{file_name}': {str(e)}")
-        else:
-            print(f"No export button found for '{file_name}', skipping...")
+        previous_files = set(os.listdir(directory))
+        try:
+            driver.execute_script("arguments[0].scrollIntoView(true);", csv_link)
+            wait.until(EC.visibility_of(csv_link))
+            driver.execute_script("arguments[0].click();", csv_link)
+            deadline = time.monotonic() + 120
+            downloaded_file = None
+            while time.monotonic() < deadline:
+                new_csvs = [
+                    os.path.join(directory, name)
+                    for name in os.listdir(directory)
+                    if name not in previous_files and name.lower().endswith(".csv")
+                ]
+                if len(new_csvs) > 1:
+                    raise RuntimeError("Multiple new CSV files appeared; cannot identify this export.")
+                if new_csvs:
+                    downloaded_file = new_csvs[0]
+                    break
+                time.sleep(1)
+            if downloaded_file is None:
+                raise RuntimeError("No new CSV download completed within 120 seconds.")
+            os.replace(downloaded_file, os.path.join(directory, file_name))
+        except Exception as exc:
+            raise RuntimeError(f"Could not download IMDb export '{file_name}'. Sync stopped.") from exc
 
     return driver, wait
 
-def get_imdb_watchlist(driver, wait, directory):
+def validate_existing_imdb_exports(directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value):
+    required_exports = {}
+    if sync_watchlist_value or remove_watched_from_watchlists_value:
+        required_exports["watchlist.csv"] = ["Title", "Year", "Const", "Created", "Title Type"]
+    if sync_ratings_value or mark_rated_as_watched_value:
+        required_exports["ratings.csv"] = ["Title", "Year", "Your Rating", "Const", "Date Rated", "Title Type"]
+    if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
+        required_exports["checkins.csv"] = ["Title", "Year", "Const", "Created", "Title Type"]
+
+    missing_exports = []
+    invalid_exports = []
+    for file_name, required_columns in required_exports.items():
+        file_path = os.path.join(directory, file_name)
+        if not os.path.isfile(file_path):
+            missing_exports.append(file_name)
+            continue
+
+        if os.path.getsize(file_path) == 0:
+            continue
+
+        with open(file_path, "r", encoding="utf-8-sig", newline="") as file:
+            header = next(csv.reader(file), None)
+        if not header:
+            invalid_exports.append(f"{file_name} (empty file or missing header)")
+            continue
+
+        missing_columns = [column for column in required_columns if column not in header]
+        if missing_columns:
+            invalid_exports.append(
+                f"{file_name} (missing columns: {', '.join(missing_columns)})"
+            )
+
+    if missing_exports or invalid_exports:
+        details = []
+        if missing_exports:
+            details.append(f"missing: {', '.join(missing_exports)}")
+        if invalid_exports:
+            details.append(f"invalid: {'; '.join(invalid_exports)}")
+        raise ValueError(
+            "Existing IMDb exports are not ready (" + "; ".join(details) + "). "
+            f"Download the required CSV exports and place them in: {directory}"
+        )
+
+def prepare_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value, use_existing_exports=False):
+    if use_existing_exports:
+        validate_existing_imdb_exports(
+            directory,
+            sync_watchlist_value,
+            sync_ratings_value,
+            sync_watch_history_value,
+            remove_watched_from_watchlists_value,
+            mark_rated_as_watched_value
+        )
+        print(f"Using existing IMDb CSV exports from: {directory}")
+        return driver, wait
+
+    driver, wait = generate_imdb_exports(
+        driver,
+        wait,
+        directory,
+        sync_watchlist_value,
+        sync_ratings_value,
+        sync_watch_history_value,
+        remove_watched_from_watchlists_value,
+        mark_rated_as_watched_value
+    )
+    return download_imdb_exports(
+        driver,
+        wait,
+        directory,
+        sync_watchlist_value,
+        sync_ratings_value,
+        sync_watch_history_value,
+        remove_watched_from_watchlists_value,
+        mark_rated_as_watched_value
+    )
+
+def get_imdb_watchlist(driver, wait, directory, delete_csv=True):
     # Get IMDB Watchlist Items
     imdb_watchlist = []
     imdb_watchlist_size = 0
@@ -206,9 +485,15 @@ def get_imdb_watchlist(driver, wait, directory):
 
         if not os.path.exists(watchlist_path):
             raise FileNotFoundError(f"IMDB watchlist data not found. '{watchlist_filename}' not found in the directory")
+
+        if os.path.getsize(watchlist_path) == 0:
+            print(f"{watchlist_filename} is empty. Assuming the IMDb list is empty.")
+            if delete_csv:
+                os.remove(watchlist_path)
+            return imdb_watchlist, imdb_watchlist_size, driver, wait
         
         # Open and process the 'watchlist.csv' file
-        with open(watchlist_path, 'r', encoding='utf-8') as file:
+        with open(watchlist_path, 'r', encoding='utf-8-sig') as file:
             reader = csv.reader(file)
             header = next(reader)  # Read the header row
 
@@ -249,7 +534,7 @@ def get_imdb_watchlist(driver, wait, directory):
                     })
     
         # Delete 'watchlist.csv'
-        if os.path.exists(watchlist_path):
+        if delete_csv and os.path.exists(watchlist_path):
             os.remove(watchlist_path)
         
     except FileNotFoundError as e:
@@ -272,7 +557,7 @@ def get_imdb_watchlist(driver, wait, directory):
     
     return imdb_watchlist, imdb_watchlist_size, driver, wait
 
-def get_imdb_ratings(driver, wait, directory):
+def get_imdb_ratings(driver, wait, directory, delete_csv=True):
     # Get IMDB Ratings
     imdb_ratings = []
     try:
@@ -282,9 +567,15 @@ def get_imdb_ratings(driver, wait, directory):
 
         if not os.path.exists(ratings_path):
             raise FileNotFoundError(f"IMDB ratings data not found. '{ratings_filename}' not found in the directory")
+
+        if os.path.getsize(ratings_path) == 0:
+            print(f"{ratings_filename} is empty. Assuming the IMDb list is empty.")
+            if delete_csv:
+                os.remove(ratings_path)
+            return imdb_ratings, driver, wait
         
         # Open and process the 'ratings.csv' file
-        with open(ratings_path, 'r', encoding='utf-8') as file:
+        with open(ratings_path, 'r', encoding='utf-8-sig') as file:
             reader = csv.reader(file)
             header = next(reader)  # Read the header row
 
@@ -329,7 +620,7 @@ def get_imdb_ratings(driver, wait, directory):
                     })
         
         # Delete 'ratings.csv'
-        if os.path.exists(ratings_path):
+        if delete_csv and os.path.exists(ratings_path):
             os.remove(ratings_path)
         
     except FileNotFoundError as e:
@@ -350,7 +641,7 @@ def get_imdb_ratings(driver, wait, directory):
     
     return imdb_ratings, driver, wait
     
-def get_imdb_checkins(driver, wait, directory):
+def get_imdb_checkins(driver, wait, directory, delete_csv=True):
     # Get IMDB Check-ins
     imdb_checkins = []
     imdb_checkins_size = 0
@@ -361,9 +652,15 @@ def get_imdb_checkins(driver, wait, directory):
 
         if not os.path.exists(checkins_path):
             raise FileNotFoundError(f"IMDB Check-ins data not found. '{checkins_filename}' not found in the directory")
+
+        if os.path.getsize(checkins_path) == 0:
+            print(f"{checkins_filename} is empty. Assuming the IMDb list is empty.")
+            if delete_csv:
+                os.remove(checkins_path)
+            return imdb_checkins, imdb_checkins_size, driver, wait
         
         # Open and process the 'checkins.csv' file
-        with open(checkins_path, 'r', encoding='utf-8') as file:
+        with open(checkins_path, 'r', encoding='utf-8-sig') as file:
             reader = csv.reader(file)
             header = next(reader)  # Read the header row
 
@@ -405,7 +702,7 @@ def get_imdb_checkins(driver, wait, directory):
                     })
                         
         # Delete 'checkins.csv'
-        if os.path.exists(checkins_path):
+        if delete_csv and os.path.exists(checkins_path):
             os.remove(checkins_path)
         
     except FileNotFoundError as e:
@@ -527,6 +824,8 @@ def get_imdb_reviews(driver, wait, directory):
                     error_message = 'Timed out waiting for URL change or next page review elements on IMDB reviews page. Exiting the loop without error.'
                     EL.logger.error(error_message, exc_info=True)
                     break
+            except EH.IMDbHTTP405Exception:
+                raise
             except Exception as e:
                 errors_found_getting_imdb_reviews = True
                 error_message = f"Exception occurred while getting IMDB reviews: {type(e)}"
@@ -534,6 +833,8 @@ def get_imdb_reviews(driver, wait, directory):
                 EL.logger.error(error_message, exc_info=True)
                 break
     
+    except EH.IMDbHTTP405Exception:
+        raise
     except Exception as e:
         errors_found_getting_imdb_reviews = True
         error_message = f"Exception occurred while getting IMDB reviews: {type(e)}"

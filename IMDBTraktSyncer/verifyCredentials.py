@@ -19,7 +19,6 @@ def prompt_get_credentials():
     # Default values for missing credentials
     default_values = {
         "trakt_client_id": "empty",
-        "trakt_client_secret": "empty",
         "trakt_access_token": "empty",
         "trakt_refresh_token": "empty",
         "trakt_token_expires": "empty",
@@ -39,6 +38,8 @@ def prompt_get_credentials():
     else:
         file_data = {}
 
+    file_data.pop("trakt_client_secret", None)
+
     # Update only the keys related to default values
     values = {key: file_data.get(key, default_value) for key, default_value in default_values.items()}
     
@@ -46,14 +47,14 @@ def prompt_get_credentials():
     for key, value in values.items():
         if value == "empty" and key not in ["trakt_access_token", "trakt_refresh_token", "trakt_token_expires"]:
             if key == "imdb_username":
-                prompt_message = f"Please enter a value for {key} (email or phone number): "
+                prompt_message = "Please enter your IMDb/Amazon email address or phone number: "
             elif key == "trakt_client_id":
                 print("\n")
                 print("***** TRAKT API SETUP *****")
                 print("Follow the instructions to setup your Trakt API application:")
                 print("  1. Login to Trakt and navigate to your API apps page: https://trakt.tv/oauth/applications")
                 print("  2. Create a new API application named 'IMDBTraktSyncer'.")
-                print("  3. Use 'urn:ietf:wg:oauth:2.0:oob' as the Redirect URI.")
+                print("  3. No redirect URI or client secret is needed for device authorization.")
                 print("\n")
                 prompt_message = "Please enter your Trakt Client ID: "
             else:
@@ -74,13 +75,12 @@ def prompt_get_credentials():
     
     if should_refresh:
         client_id = values["trakt_client_id"]
-        client_secret = values["trakt_client_secret"]
         refresh_token = values.get("trakt_refresh_token", "empty")
 
         if refresh_token != "empty":
-            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id, client_secret, refresh_token)
+            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id, refresh_token)
         else:
-            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id, client_secret)
+            access_token, refresh_token, expiration_time = authTrakt.authenticate(client_id)
         
         values["trakt_access_token"] = access_token
         values["trakt_refresh_token"] = refresh_token
@@ -94,7 +94,7 @@ def prompt_get_credentials():
         json.dump(file_data, f, indent=4, separators=(', ', ': '))
 
     # Return the credentials
-    return values["trakt_client_id"], values["trakt_client_secret"], values["trakt_access_token"], values["trakt_refresh_token"], values["imdb_username"], values["imdb_password"]
+    return values["trakt_client_id"], "", values["trakt_access_token"], values["trakt_refresh_token"], values["imdb_username"], values["imdb_password"]
 
 def prompt_sync_ratings():
     """

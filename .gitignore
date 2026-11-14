@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local runtime data and credentials
+IMDBTraktSyncer/credentials.txt
+IMDBTraktSyncer/trakt_data_cache.json
+IMDBTraktSyncer/Chrome/
+IMDBTraktSyncer/Chromedriver/
+IMDBTraktSyncer/*.csv
+IMDBTraktSyncer/log.txt

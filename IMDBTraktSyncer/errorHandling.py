@@ -17,6 +17,11 @@ from IMDBTraktSyncer import errorLogger as EL
 class PageLoadException(Exception):
     pass
 
+class IMDbHTTP405Exception(Exception):
+    pass
+
+IMDB_405_RETRY_DELAY = 60
+
 def report_error(error_message):
     github_issue_url = "https://github.com/RileyXX/IMDB-Trakt-Syncer/issues/new?template=bug_report.yml"
     traceback_info = traceback.format_exc()
@@ -178,12 +183,13 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
 
             # Wait until the status code becomes available
             wait.until(lambda driver: driver.execute_script(
-                "return window.performance.getEntries().length > 0 && window.performance.getEntries()[0].responseStatus !== undefined"
+                "const navigation = window.performance.getEntriesByType('navigation')[0];"
+                "return navigation !== undefined && navigation.responseStatus !== undefined;"
             ))
 
             # Get the HTTP status code of the page using JavaScript
             status_code = driver.execute_script(
-                "return window.performance.getEntries()[0].responseStatus;"
+                "return window.performance.getEntriesByType('navigation')[0].responseStatus;"
             )
             
             # Update resolved_url with the current URL after potential redirects
@@ -207,9 +213,18 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             elif status_code in [408, 425, 429, 500, 502, 503, 504]:
                 raise PageLoadException(f"Retryable HTTP error encountered: {status_code}")
             
+            elif status_code == 405:
+                raise IMDbHTTP405Exception(
+                    f"IMDb returned HTTP 405 while loading {resolved_url}. "
+                    "A CAPTCHA or other access challenge may be blocking the sync."
+                )
+
             elif status_code >= 400:
-                print(f"   - Non-retryable error encountered. Status code: {status_code} Aborting.")
-                return False, status_code, url, driver, wait
+                print(
+                    f"   - Non-retryable page error. Status code: {status_code}. "
+                    f"URL: {resolved_url}. Page title: {driver.title}. Aborting."
+                )
+                return False, status_code, resolved_url, driver, wait
 
             else:
                 # Page loaded successfully
@@ -231,6 +246,25 @@ def get_page_with_retries(url, driver, wait, total_wait_time=180, initial_wait_t
             remaining_time = total_wait_time - total_time_spent
             print(f"   - Retrying... Time Remaining: {int(remaining_time)}s")
             time.sleep(min(remaining_time, initial_wait_time))
+            continue
+
+        except IMDbHTTP405Exception as e:
+            print(f"\n{e}")
+            print(
+                f"The browser will stay open while the script retries in {IMDB_405_RETRY_DELAY} seconds. "
+                "Complete any CAPTCHA in the visible browser. Press Ctrl+C to cancel; "
+                "if Chrome is headless, rerun with --show-browser."
+            )
+            EL.logger.warning(
+                "IMDb returned HTTP 405 for %s; retrying in %s seconds.",
+                url,
+                IMDB_405_RETRY_DELAY
+            )
+            try:
+                time.sleep(IMDB_405_RETRY_DELAY)
+            except KeyboardInterrupt:
+                print("\nIMDb retry cancelled.")
+                raise
             continue
 
         except WebDriverException as e:
@@ -383,6 +417,8 @@ def resolve_imdb_id_with_driver(imdb_id, driver, wait):
         final_imdb_id = resolved_url.split("/title/")[1].split("/")[0]
         return final_imdb_id, driver, wait
 
+    except IMDbHTTP405Exception:
+        raise
     except Exception as e:
         print(f"Error resolving IMDB_ID {imdb_id}: {e}")
         return imdb_id, driver, wait  # Return the original ID if an error occurs

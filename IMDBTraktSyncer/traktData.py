@@ -2,6 +2,8 @@ import json
 import urllib.parse
 import datetime
 import sys
+import os
+import tempfile
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from IMDBTraktSyncer import errorHandling as EH
@@ -20,34 +22,41 @@ def get_trakt_encoded_username():
     return encoded_username
     
 def get_trakt_watchlist(encoded_username):
-    # Get Trakt Watchlist Items
-    response = EH.make_trakt_request(f'https://api.trakt.tv/users/{encoded_username}/watchlist?sort=added,asc')
+    # Get all pages of Trakt Watchlist Items
+    url = f'https://api.trakt.tv/users/{encoded_username}/watchlist?sort=added,asc'
+    response = EH.make_trakt_request(url, params={'page': 1, 'limit': 100})
     json_data = json.loads(response.text)
+    total_pages = int(response.headers.get('X-Pagination-Page-Count', 1))
 
     trakt_watchlist = []
 
-    for item in json_data:
-        if item['type'] == 'movie':
-            movie = item.get('movie')
-            imdb_movie_id = movie.get('ids', {}).get('imdb')
-            imdb_movie_id = remove_slashes(imdb_movie_id)
-            trakt_movie_id = movie.get('ids', {}).get('trakt')
-            trakt_watchlist.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Date_Added': item.get('listed_at'), 'Type': 'movie'})
-        elif item['type'] == 'show':
-            show = item.get('show')
-            imdb_show_id = show.get('ids', {}).get('imdb')
-            imdb_show_id = remove_slashes(imdb_show_id)
-            trakt_show_id = show.get('ids', {}).get('trakt')
-            trakt_watchlist.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'Date_Added': item.get('listed_at'), 'Type': 'show'})
-        elif item['type'] == 'episode':
-            show = item.get('show')
-            show_title = show.get('title')
-            episode = item.get('episode')
-            imdb_episode_id = episode.get('ids', {}).get('imdb')
-            imdb_episode_id = remove_slashes(imdb_episode_id)
-            trakt_episode_id = episode.get('ids', {}).get('trakt')
-            episode_title = f'{show_title}: {episode.get("title")}'
-            trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'Date_Added': item.get('listed_at'), 'Type': 'episode'})
+    for page in range(1, total_pages + 1):
+        if page > 1:
+            response = EH.make_trakt_request(url, params={'page': page, 'limit': 100})
+            json_data = json.loads(response.text)
+
+        for item in json_data:
+            if item['type'] == 'movie':
+                movie = item.get('movie')
+                imdb_movie_id = movie.get('ids', {}).get('imdb')
+                imdb_movie_id = remove_slashes(imdb_movie_id)
+                trakt_movie_id = movie.get('ids', {}).get('trakt')
+                trakt_watchlist.append({'Title': movie.get('title'), 'Year': movie.get('year'), 'IMDB_ID': imdb_movie_id, 'TraktID': trakt_movie_id, 'Date_Added': item.get('listed_at'), 'Type': 'movie'})
+            elif item['type'] == 'show':
+                show = item.get('show')
+                imdb_show_id = show.get('ids', {}).get('imdb')
+                imdb_show_id = remove_slashes(imdb_show_id)
+                trakt_show_id = show.get('ids', {}).get('trakt')
+                trakt_watchlist.append({'Title': show.get('title'), 'Year': show.get('year'), 'IMDB_ID': imdb_show_id, 'TraktID': trakt_show_id, 'Date_Added': item.get('listed_at'), 'Type': 'show'})
+            elif item['type'] == 'episode':
+                show = item.get('show')
+                show_title = show.get('title')
+                episode = item.get('episode')
+                imdb_episode_id = episode.get('ids', {}).get('imdb')
+                imdb_episode_id = remove_slashes(imdb_episode_id)
+                trakt_episode_id = episode.get('ids', {}).get('trakt')
+                episode_title = f'{show_title}: {episode.get("title")}'
+                trakt_watchlist.append({'Title': episode_title, 'Year': episode.get('year'), 'IMDB_ID': imdb_episode_id, 'TraktID': trakt_episode_id, 'Date_Added': item.get('listed_at'), 'Type': 'episode'})
     
     return trakt_watchlist
 
@@ -227,3 +236,116 @@ def get_trakt_watch_history(encoded_username):
     trakt_watch_history = watched_movies + watched_shows + watched_episodes
     
     return trakt_watch_history
+
+TRAKT_CACHE_SCHEMA_VERSION = 1
+
+def _empty_trakt_cache(username):
+    return {
+        "schema_version": TRAKT_CACHE_SCHEMA_VERSION,
+        "username": username,
+        "datasets": {}
+    }
+
+def _load_trakt_cache(cache_file, username):
+    if not os.path.exists(cache_file):
+        return _empty_trakt_cache(username)
+
+    try:
+        with open(cache_file, "r", encoding="utf-8") as file:
+            cache = json.load(file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Could not read Trakt cache '{cache_file}'. Use --update-trakt-cache to rebuild it."
+        ) from exc
+
+    if (
+        not isinstance(cache, dict)
+        or cache.get("schema_version") != TRAKT_CACHE_SCHEMA_VERSION
+        or not isinstance(cache.get("datasets"), dict)
+    ):
+        raise ValueError(
+            f"Trakt cache '{cache_file}' has an unsupported format. "
+            "Use --update-trakt-cache to rebuild it."
+        )
+
+    if cache.get("username") != username:
+        print("Trakt account changed; creating a separate cache for the current account.")
+        return _empty_trakt_cache(username)
+
+    return cache
+
+def _save_trakt_cache(cache_file, cache):
+    cache_directory = os.path.dirname(os.path.abspath(cache_file))
+    temporary_file = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=cache_directory,
+            prefix=".trakt-cache-",
+            suffix=".tmp",
+            delete=False
+        ) as file:
+            json.dump(cache, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            temporary_file = file.name
+
+        if os.name != "nt":
+            os.chmod(temporary_file, 0o600)
+        os.replace(temporary_file, cache_file)
+        temporary_file = None
+    except OSError as exc:
+        raise RuntimeError(f"Could not write Trakt cache '{cache_file}'.") from exc
+    finally:
+        if temporary_file and os.path.exists(temporary_file):
+            os.remove(temporary_file)
+
+def get_cached_trakt_data(encoded_username, cache_file, enabled_datasets, update_cache=False):
+    username = urllib.parse.unquote(encoded_username)
+    fetchers = {
+        "watchlist": get_trakt_watchlist,
+        "ratings": get_trakt_ratings,
+        "comments": get_trakt_comments,
+        "watch_history": get_trakt_watch_history
+    }
+
+    for dataset_name in enabled_datasets:
+        if dataset_name not in fetchers:
+            raise ValueError(f"Unknown Trakt dataset requested: {dataset_name}")
+
+    cache = _empty_trakt_cache(username) if update_cache else _load_trakt_cache(cache_file, username)
+    results = {dataset_name: [] for dataset_name in fetchers}
+    cache_updated = False
+
+    for dataset_name, enabled in enabled_datasets.items():
+        if not enabled:
+            continue
+
+        cache_entry = cache["datasets"].get(dataset_name)
+        if cache_entry is not None and not update_cache:
+            if not isinstance(cache_entry, dict) or not isinstance(cache_entry.get("items"), list):
+                raise ValueError(
+                    f"Trakt cache dataset '{dataset_name}' is invalid. "
+                    "Use --update-trakt-cache to rebuild it."
+                )
+            print(f"Using cached Trakt {dataset_name} ({len(cache_entry['items'])} items).")
+        else:
+            action = "Refreshing" if update_cache else "Fetching"
+            print(f"{action} Trakt {dataset_name}...")
+            items = fetchers[dataset_name](encoded_username)
+            if not isinstance(items, list):
+                raise TypeError(f"Trakt returned invalid {dataset_name} data; expected a list.")
+            cache_entry = {
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "items": items
+            }
+            cache["datasets"][dataset_name] = cache_entry
+            cache_updated = True
+
+        results[dataset_name] = cache_entry["items"]
+
+    if cache_updated:
+        _save_trakt_cache(cache_file, cache)
+        print(f"Updated Trakt cache: {cache_file}")
+
+    return results
