@@ -151,7 +151,7 @@ def clear_user_data(main_directory):
 
 def clear_cache(main_directory):
     """
-    Deletes all folders, .zip files, .txt files (except credentials.txt) in the given directory and clears selenium chromedriver cache.
+    Deletes cached browser files, exports, logs, and Trakt data while preserving credentials.
     
     :param main_directory: Directory path where data should be cleared.
     """
@@ -170,6 +170,10 @@ def clear_cache(main_directory):
             if file == "credentials.txt":
                 print(f"Skipping {file_path} (credentials.txt)")
                 continue  # Skip this file
+
+            if file == "trakt_data_cache.json":
+                try_remove(file_path)
+                continue
             
             # Remove .zip files
             if file.endswith(".zip"):
@@ -203,7 +207,7 @@ def clear_cache(main_directory):
     
 def uninstall(main_directory):
     """
-    Deletes all folders, .zip files, .txt files (except credentials.txt and log.txt) in the given directory and clears selenium chromedriver cache before uninstalling.
+    Deletes cached browser files, exports, logs, and Trakt data while preserving credentials before uninstalling.
         
     :param main_directory: Directory path where data should be cleared.
     """
@@ -222,6 +226,10 @@ def uninstall(main_directory):
             if file in ["credentials.txt", "log.txt"]:
                 print(f"Skipping {file_path} (credentials.txt)")
                 continue  # Skip this file
+
+            if file == "trakt_data_cache.json":
+                try_remove(file_path)
+                continue
             
             # Remove .zip files
             if file.endswith(".zip"):
@@ -259,7 +267,7 @@ def uninstall(main_directory):
 
 def clean_uninstall(main_directory):
     """
-    Deletes all folders, .zip files, .txt files in the given directory and clears selenium chromedriver cache before uninstalling.
+    Deletes all cached data, including credentials and Trakt data, before uninstalling.
         
     :param main_directory: Directory path where data should be cleared.
     """
@@ -273,6 +281,10 @@ def clean_uninstall(main_directory):
         # Delete files first
         for file in files:
             file_path = os.path.join(root, file)
+
+            if file == "trakt_data_cache.json":
+                try_remove(file_path)
+                continue
             
             # Remove .zip files
             if file.endswith(".zip"):

@@ -19,13 +19,90 @@ from IMDBTraktSyncer import arguments
 class PageLoadException(Exception):
     pass
 
+def _is_signed_in(driver, timeout=10):
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")
+            )
+        )
+        return True
+    except TimeoutException:
+        return False
+
+def _click_sign_in_provider(driver, wait, provider):
+    provider_text = f"sign in with {provider.lower()}"
+    sign_in_link_xpath = (
+        "//a[contains(translate(normalize-space(.), "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "
+        f"'{provider_text}')]"
+    )
+    sign_in_link = wait.until(
+        EC.element_to_be_clickable((By.XPATH, sign_in_link_xpath))
+    )
+    driver.execute_script("arguments[0].click();", sign_in_link)
+
+def _try_imdb_sign_in(driver, wait, username, password):
+    try:
+        _click_sign_in_provider(driver, wait, "IMDb")
+        email_input = wait.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='email']"))
+        )
+        password_input = wait.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
+        )
+        email_input.send_keys(username)
+        password_input.send_keys(password)
+        submit_button = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']"))
+        )
+        driver.execute_script("arguments[0].click();", submit_button)
+        return _is_signed_in(driver)
+    except TimeoutException:
+        return False
+
+def _try_amazon_sign_in(driver, wait, username, password, allow_manual_verification):
+    try:
+        _click_sign_in_provider(driver, wait, "Amazon")
+        email_input = wait.until(EC.visibility_of_element_located((By.ID, "ap_email")))
+        email_input.send_keys(username)
+        continue_button = wait.until(EC.element_to_be_clickable((By.ID, "continue")))
+        driver.execute_script("arguments[0].click();", continue_button)
+
+        if allow_manual_verification:
+            print("Complete any Amazon CAPTCHA or verification in the visible browser within 2 minutes.")
+        password_wait = WebDriverWait(driver, timeout=120 if allow_manual_verification else 10)
+        try:
+            password_input = password_wait.until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
+            )
+        except TimeoutException:
+            return _is_signed_in(driver, timeout=5)
+        password_input.send_keys(password)
+        submit_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "input#signInSubmit, button#signInSubmit, input[type='submit']")
+            )
+        )
+        driver.execute_script("arguments[0].click();", submit_button)
+        return _is_signed_in(driver, timeout=120 if allow_manual_verification else 15)
+    except TimeoutException:
+        return False
+
 def main():
     parser = argparse.ArgumentParser(description="IMDBTraktSyncer CLI")
     parser.add_argument("--clear-user-data", action="store_true", help="Clears user entered credentials.")
-    parser.add_argument("--clear-cache", action="store_true", help="Clears cached browsers, drivers and error logs.")
+    parser.add_argument("--clear-cache", action="store_true", help="Clears cached browsers, drivers, Trakt data, exports, and logs.")
     parser.add_argument("--uninstall", action="store_true", help="Clears cached browsers and drivers before uninstalling.")
     parser.add_argument("--clean-uninstall", action="store_true", help="Clears all cached data, inluding user credentials, cached browsers and drivers before uninstalling.")
     parser.add_argument("--directory", action="store_true", help="Prints the package install directory.")
+    parser.add_argument("--show-browser", action="store_true", help="Runs Chrome visibly instead of headless.")
+    parser.add_argument("--update-trakt-cache", action="store_true", help="Fetches fresh Trakt data and updates the local cache.")
+    parser.add_argument(
+        "--use-existing-imdb-exports",
+        action="store_true",
+        help="Uses watchlist.csv, ratings.csv, and checkins.csv already in the package directory."
+    )
     
     args = parser.parse_args()
     
@@ -77,8 +154,10 @@ def main():
             remove_watchlist_items_older_than_x_days_value, watchlist_days_to_remove_value = VC.prompt_remove_watchlist_items_older_than_x_days()
             
             # Check if Chrome portable browser is downloaded and up to date
-            CC.checkChrome()
+            chrome_version = CC.checkChrome()
             browser_type, headless = CC.get_browser_type()
+            if args.show_browser:
+                headless = False
 
             # Set up directory for downloads
             directory = os.path.dirname(os.path.realpath(__file__))
@@ -86,9 +165,9 @@ def main():
             # Start WebDriver
             print('Starting WebDriver...')
             
-            chrome_binary_path  = CC.get_chrome_binary_path(directory)
-            chromedriver_binary_path  = CC.get_chromedriver_binary_path(directory)
-            user_data_directory = CC.get_user_data_directory()
+            chrome_binary_path  = CC.get_chrome_binary_path(directory, chrome_version)
+            chromedriver_binary_path  = CC.get_chromedriver_binary_path(directory, chrome_version)
+            user_data_directory = CC.get_user_data_directory(directory, chrome_version)
             
             # Initialize Chrome options
             options = Options()
@@ -96,7 +175,6 @@ def main():
             options.add_argument(f"--user-data-dir={user_data_directory}")
             if headless == True:
                 options.add_argument("--headless=new")
-            options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36')
             options.add_experimental_option("prefs", {
                 "download.default_directory": directory,
                 "download.directory_upgrade": True,
@@ -111,7 +189,6 @@ def main():
             options.add_argument('--disable-notifications')
             options.add_argument("--disable-third-party-cookies")
             options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--no-sandbox")
             options.add_argument("--disable-extensions")
             options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
             options.add_argument('--log-level=3')
@@ -161,57 +238,36 @@ def main():
                     # Page failed to load, raise an exception
                     raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
                 
-                # Wait for sign in link to appear and then click it
-                sign_in_link = wait.until(
-                    EC.presence_of_element_located(
-                        (
-                            By.XPATH,
-                            "//div[@data-testid='sign_in_content_sign_in']"
-                            "//a[.//span[contains("
-                            "translate(normalize-space(.), "
-                            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "
-                            "'imdb')]]"
-                        )
+                signed_in = _try_imdb_sign_in(driver, wait, imdb_username, imdb_password)
+
+                if not signed_in:
+                    print("IMDb sign-in did not succeed; trying Amazon sign-in.")
+                    sign_in_url = 'https://www.imdb.com/registration/signin/?subPageType=sign_in'
+                    success, status_code, url, driver, wait = EH.get_page_with_retries(
+                        sign_in_url, driver, wait
                     )
-                )
-                driver.execute_script("arguments[0].click();", sign_in_link)
-                
-                # wait for email input field and password input field to appear, then enter credentials and submit
-                email_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='email']")))[0]
-                password_input = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[type='password']")))[0]
-                email_input.send_keys(imdb_username)
-                password_input.send_keys(imdb_password)
-                submit_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit']")))
-                driver.execute_script("arguments[0].click();", submit_button)
-
-                time.sleep(2)
-
-                # go to IMDB homepage
-                success, status_code, url, driver, wait = EH.get_page_with_retries('https://www.imdb.com/', driver, wait)
-                if not success:
-                    # Page failed to load, raise an exception
-                    raise PageLoadException(f"Failed to load page. Status code: {status_code}. URL: {url}")
-
-                time.sleep(2)
+                    if not success:
+                        raise PageLoadException(
+                            f"Failed to load page. Status code: {status_code}. URL: {url}"
+                        )
+                    signed_in = _try_amazon_sign_in(
+                        driver, wait, imdb_username, imdb_password,
+                        allow_manual_verification=not headless
+                    )
 
                 # Check if signed in
-                try:
-                    element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".nav__userMenu .navbar__user-menu-toggle__button")))
+                if signed_in or _is_signed_in(driver):
                     print("Successfully signed in to IMDB")
-                except TimeoutException:
+                else:
                     print("\nError: Not signed in to IMDB")
                     print("\nPossible Causes and Solutions:")
-                    print("- IMDB captcha check triggered or incorrect IMDB login.")
+                    print("- CAPTCHA, verification challenge, or incorrect IMDb/Amazon login.")
                     
-                    print("\n1. IMDB Captcha Check:")
-                    print("   If your login is correct, the issue is likely due to an IMDB captcha check.")
+                    print("\n1. CAPTCHA or verification challenge:")
+                    print("   If your login is correct, IMDb or Amazon may require a CAPTCHA or verification code.")
                     print("   To resolve this, follow these steps:")
-                    print("   - Log in to IMDB on your browser (preferably Chrome) and on the same computer.")
-                    print("   - If already logged in, log out and log back in.")
-                    print("   - Repeat this process until a captcha check is triggered.")
-                    print("   - Complete the captcha and finish logging in.")
-                    print("   - After successfully logging in, run the script again.")
-                    print("   - You may need to repeat these steps until the captcha check is no longer triggered.")
+                    print("   - Run with --show-browser and complete any prompt in the browser.")
+                    print("   - After logging in successfully in your browser, run the script again.")
                     
                     print("\n2. Incorrect IMDB Login:")
                     print("   If your IMDB login is incorrect, update your login credentials:")
@@ -271,28 +327,54 @@ def main():
             # Get Trakt Data
             print('Processing Trakt Data')
             trakt_encoded_username = traktData.get_trakt_encoded_username()
-            if sync_watchlist_value or remove_watched_from_watchlists_value:
-                trakt_watchlist = traktData.get_trakt_watchlist(trakt_encoded_username)
-            if sync_ratings_value or mark_rated_as_watched_value:
-                trakt_ratings = traktData.get_trakt_ratings(trakt_encoded_username)
-            if sync_reviews_value:
-                trakt_reviews = traktData.get_trakt_comments(trakt_encoded_username)
-            if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
-                trakt_watch_history = traktData.get_trakt_watch_history(trakt_encoded_username)
+            trakt_data = traktData.get_cached_trakt_data(
+                trakt_encoded_username,
+                os.path.join(directory, "trakt_data_cache.json"),
+                {
+                    "watchlist": sync_watchlist_value or remove_watched_from_watchlists_value,
+                    "ratings": sync_ratings_value or mark_rated_as_watched_value,
+                    "comments": sync_reviews_value,
+                    "watch_history": (
+                        sync_watch_history_value
+                        or remove_watched_from_watchlists_value
+                        or mark_rated_as_watched_value
+                    )
+                },
+                update_cache=args.update_trakt_cache
+            )
+            trakt_watchlist = trakt_data["watchlist"]
+            trakt_ratings = trakt_data["ratings"]
+            trakt_reviews = trakt_data["comments"]
+            trakt_watch_history = trakt_data["watch_history"]
             print('Processing Trakt Data Complete')
             
             # Get IMDB Data
             print('Processing IMDB Data')
-            driver, wait = imdbData.generate_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
-            driver, wait = imdbData.download_imdb_exports(driver, wait, directory, sync_watchlist_value, sync_ratings_value, sync_watch_history_value, remove_watched_from_watchlists_value, mark_rated_as_watched_value)
+            driver, wait = imdbData.prepare_imdb_exports(
+                driver,
+                wait,
+                directory,
+                sync_watchlist_value,
+                sync_ratings_value,
+                sync_watch_history_value,
+                remove_watched_from_watchlists_value,
+                mark_rated_as_watched_value,
+                use_existing_exports=args.use_existing_imdb_exports
+            )
             if sync_watchlist_value or remove_watched_from_watchlists_value:
-                imdb_watchlist, imdb_watchlist_size, driver, wait = imdbData.get_imdb_watchlist(driver, wait, directory)
+                imdb_watchlist, imdb_watchlist_size, driver, wait = imdbData.get_imdb_watchlist(
+                    driver, wait, directory, delete_csv=not args.use_existing_imdb_exports
+                )
             if sync_ratings_value or mark_rated_as_watched_value:
-                imdb_ratings, driver, wait = imdbData.get_imdb_ratings(driver, wait, directory)
+                imdb_ratings, driver, wait = imdbData.get_imdb_ratings(
+                    driver, wait, directory, delete_csv=not args.use_existing_imdb_exports
+                )
             if sync_reviews_value:
                 imdb_reviews, errors_found_getting_imdb_reviews, driver, wait = imdbData.get_imdb_reviews(driver, wait, directory)
             if sync_watch_history_value or remove_watched_from_watchlists_value or mark_rated_as_watched_value:
-                imdb_watch_history, imdb_watch_history_size, driver, wait = imdbData.get_imdb_checkins(driver, wait, directory)
+                imdb_watch_history, imdb_watch_history_size, driver, wait = imdbData.get_imdb_checkins(
+                    driver, wait, directory, delete_csv=not args.use_existing_imdb_exports
+                )
             print('Processing IMDB Data Complete')
                         
             if sync_watchlist_value:
@@ -593,7 +675,8 @@ def main():
                                         driver.execute_script("arguments[0].click();", watchlist_button)
                                         try:
                                             WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'button[data-testid="tm-box-wl-button"] .ipc-icon--done')))
-                                            
+                                            if args.use_existing_imdb_exports:
+                                                imdbData.update_existing_imdb_export(directory, "watchlist.csv", item)
                                             print(f" - Added {item['Type']} ({item_count} of {num_items}): {episode_title}{item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})")
                                             
                                             break  # Break the loop if successful
@@ -605,10 +688,9 @@ def main():
                                         print(f" - {error_message}")
                                         EL.logger.error(error_message)
                                 else:
-                                    error_message1 = f" - Failed to add item ({item_count} of {num_items}): {episode_title}{item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
-                                    error_message2 = f"   - {item['Type'].capitalize()} already exists in IMDB watchlist."
-                                    EL.logger.error(error_message1)
-                                    EL.logger.error(error_message2)
+                                    print(f" - {item['Type'].capitalize()} already exists in IMDB watchlist ({item['IMDB_ID']}).")
+                                    if args.use_existing_imdb_exports:
+                                        imdbData.update_existing_imdb_export(directory, "watchlist.csv", item)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 
@@ -619,6 +701,9 @@ def main():
                                 # Check if watchlist_button has class .not-inWL before clicking
                                 if 'not-inWL' in watchlist_button.get_attribute('class'):
                                     driver.execute_script("arguments[0].click();", watchlist_button)
+                                    wait.until(lambda d: 'not-inWL' not in d.find_element(By.CSS_SELECTOR, '.titlereference-watch-ribbon > .wl-ribbon').get_attribute('class'))
+                                if args.use_existing_imdb_exports:
+                                    imdbData.update_existing_imdb_export(directory, "watchlist.csv", item)
                             
                         except (NoSuchElementException, TimeoutException, PageLoadException):
                             error_message = f"Failed to add item ({item_count} of {num_items}): {item['Title']}{year_str} to IMDB Watchlist ({item['IMDB_ID']})"
@@ -763,7 +848,15 @@ def main():
                                     driver.execute_script("arguments[0].click();", rating_option_element)
                                     submit_element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.ipc-rating-prompt__rate-button')))
                                     driver.execute_script("arguments[0].click();", submit_element)
-                                    time.sleep(1)
+                                    WebDriverWait(driver, 10).until(
+                                        lambda d: d.find_element(
+                                            By.CSS_SELECTOR,
+                                            '[data-testid="hero-rating-bar__user-rating"] button.ipc-btn'
+                                        ).find_element(
+                                            By.CSS_SELECTOR,
+                                            '[data-testid="hero-rating-bar__user-rating__score"] span'
+                                        ).get_attribute("textContent").strip() == str(item["Rating"])
+                                    )
                                     
                                     print(f' - Rated {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})')
                                     
@@ -787,6 +880,9 @@ def main():
                                 driver.execute_script("arguments[0].click();", rating_option_element)
                                 
                                 time.sleep(1)
+
+                            if args.use_existing_imdb_exports:
+                                imdbData.update_existing_imdb_export(directory, "ratings.csv", item)
                                 
                         except (NoSuchElementException, TimeoutException, PageLoadException):
                             error_message = f'Failed to rate {item["Type"]}: ({i} of {len(imdb_ratings_to_set)}) {episode_title}{item["Title"]}{year_str}: {item["Rating"]}/10 on IMDB ({item["IMDB_ID"]})'
@@ -1256,7 +1352,8 @@ def main():
                                         driver.execute_script("arguments[0].click();", watch_history_button)
                                         try:
                                             WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'ipc-promptable-base__content')]//div[@data-titleinlist='true']")))
-                                            
+                                            if args.use_existing_imdb_exports:
+                                                imdbData.update_existing_imdb_export(directory, "checkins.csv", item)
                                             print(f" - Adding {item.get('Type')} ({item_count} of {num_items}): {episode_title}{item.get('Title')}{year_str} to IMDB Watch History ({item.get('IMDB_ID')})")
                             
                                             break  # Break the loop if successful
@@ -1272,6 +1369,8 @@ def main():
                                     error_message2 = f"   - {item['Type'].capitalize()} already exists in IMDB watch history."
                                     EL.logger.error(error_message1)
                                     EL.logger.error(error_message2)
+                                    if args.use_existing_imdb_exports:
+                                        imdbData.update_existing_imdb_export(directory, "checkins.csv", item)
                             else:
                                 # Handle the case when the URL contains "/reference"
                                 error_message1 = f"IMDB reference view setting is enabled. Adding items to IMDB Check-ins is not supported. See: https://www.imdb.com/preferences/general"
@@ -1335,6 +1434,20 @@ def main():
             service.stop()
             print("IMDBTraktSyncer Complete")
         
+        except EH.IMDbHTTP405Exception as e:
+            print(f"\nSync stopped: {e}")
+            print("The automatic retry was interrupted. Items already synced will be skipped if you rerun.")
+            EL.logger.warning("Sync stopped after IMDb returned HTTP 405: %s", e)
+            if 'driver' in locals() and driver is not None:
+                driver.quit()
+            if 'service' in locals() and service is not None:
+                service.stop()
+        except KeyboardInterrupt:
+            print("\nSync cancelled. Items already synced will be skipped if you rerun.")
+            if 'driver' in locals() and driver is not None:
+                driver.quit()
+            if 'service' in locals() and service is not None:
+                service.stop()
         except Exception as e:
             error_message = "An error occurred while running the script."
             EH.report_error(error_message)
@@ -1342,7 +1455,6 @@ def main():
             
             # Close the driver and stop the service if they were initialized
             if 'driver' in locals() and driver is not None:
-                driver.close()
                 driver.quit()
             if 'service' in locals() and service is not None:
                 service.stop()

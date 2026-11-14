@@ -88,11 +88,9 @@ def try_remove(file_path, retries=3, delay=1):
     
 def grant_permissions(path: Path):
     """
-    Recursively remove read-only attribute from a folder and its contents.
-    Ensures directories are accessible (add execute permission) and files are executable where needed.
-    Compatible with macOS, Linux, and Windows.
+    Remove read-only attributes on Windows and make downloaded files usable on macOS/Linux
+    without granting write access to other local users.
     """
-    # Determine the operating system
     is_windows = sys.platform.startswith('win')
 
     for root, dirs, files in os.walk(path):
@@ -104,28 +102,25 @@ def grant_permissions(path: Path):
                     # Set the read-only attribute to False for files (Windows)
                     os.chmod(item_path, item_path.stat().st_mode & ~stat.S_IREAD)  # Remove read-only attribute
                 else:
-                    # For Linux/macOS, add write permissions
-                    current_permissions = item_path.stat().st_mode
-                    item_path.chmod(current_permissions | 0o777)  # Add write permission (u+w)
-
-                    # Ensure directories are executable
-                    if item_path.is_dir():
-                        item_path.chmod(current_permissions | 0o777)  # Add execute permission (u+x) for directories
+                    current_permissions = stat.S_IMODE(item_path.stat().st_mode)
+                    if item_path.name == "credentials.txt":
+                        item_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
                     else:
-                        # For files (including chromedriver), make sure they are executable
-                        item_path.chmod(current_permissions | 0o777)  # Add execute permission (u+x, g+x, o+x) for files
+                        item_path.chmod((current_permissions & 0o755) | 0o700)
 
             except PermissionError:
                 print(f"Permission denied: Unable to modify {item_path}")
             except Exception as e:
                 print(f"Error modifying permissions for {item_path}: {e}")
 
-def get_user_data_directory():
-    directory = os.path.dirname(os.path.realpath(__file__))  # Current script's directory
-    version = get_latest_stable_version()  # Assuming this function exists and returns a version string
+def get_user_data_directory(main_directory=None, version=None):
+    if main_directory is None:
+        main_directory = get_main_directory()
+    if version is None:
+        version = get_latest_stable_version()
 
     # Path to the version directory
-    version_directory = Path(directory) / "Chrome" / version
+    version_directory = Path(main_directory) / "Chrome" / version
 
     # Automatically detect the Chrome binary directory
     chrome_binary_directory = None
@@ -152,6 +147,10 @@ def get_latest_stable_version():
     # Step 1: Get the latest stable version
     stable_url = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json"
     stable_response = EH.make_request_with_retries(stable_url)
+    if stable_response is None:
+        raise RequestException(
+            f"Could not retrieve Chrome version metadata from {stable_url}"
+        )
     stable_response.raise_for_status()
     stable_data = stable_response.json()
     stable_version = stable_data['channels']['Stable']['version']
@@ -162,6 +161,10 @@ def get_version_data(version):
     # Step 1: Fetch the data from the URL
     versions_url = "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
     response = EH.make_request_with_retries(versions_url)
+    if response is None:
+        raise RequestException(
+            f"Could not retrieve Chrome download metadata from {versions_url}"
+        )
     response.raise_for_status()
     data = response.json()
 
@@ -262,6 +265,28 @@ def is_chromedriver_up_to_date(main_directory, current_version):
 
     print(f"Chromedriver binary not found under {chromedriver_dir}.")
     return False
+
+def get_cached_chrome_version(main_directory):
+    chrome_dir = Path(main_directory) / "Chrome"
+    chromedriver_dir = Path(main_directory) / "Chromedriver"
+    if not chrome_dir.is_dir() or not chromedriver_dir.is_dir():
+        return None
+
+    installed_versions = []
+    for version_dir in chrome_dir.iterdir():
+        version = version_dir.name
+        if not version_dir.is_dir() or not all(part.isdigit() for part in version.split(".")):
+            continue
+        if not (chromedriver_dir / version).is_dir():
+            continue
+        if (is_chrome_up_to_date(main_directory, version)
+                and is_chromedriver_up_to_date(main_directory, version)):
+            installed_versions.append(version)
+
+    if not installed_versions:
+        return None
+
+    return max(installed_versions, key=lambda version: tuple(int(part) for part in version.split(".")))
 
 def download_and_extract_chrome(download_url, main_directory, version, max_wait_time=300, wait_interval=60, max_retries=3):
     zip_path = Path(main_directory) / f"chrome-{version}.zip"
@@ -496,8 +521,9 @@ def remove_old_versions(main_directory, latest_version, browser_type):
             print(f"Removing old Chromedriver version: {version_dir.name}...")
             try_remove(version_dir)
 
-def get_chrome_binary_path(main_directory):
-    version = get_latest_stable_version()
+def get_chrome_binary_path(main_directory, version=None):
+    if version is None:
+        version = get_latest_stable_version()
 
     # Build the path to the version directory
     chrome_dir = Path(main_directory) / "Chrome" / version
@@ -542,8 +568,9 @@ def get_chrome_binary_path(main_directory):
 
     raise FileNotFoundError(f"No valid Chrome binary found for platform {platform_key} in {chrome_dir}")
     
-def get_chromedriver_binary_path(main_directory):
-    version = get_latest_stable_version()
+def get_chromedriver_binary_path(main_directory, version=None):
+    if version is None:
+        version = get_latest_stable_version()
 
     chromedriver_dir = Path(main_directory) / "Chromedriver" / version
     
@@ -647,10 +674,28 @@ def checkChrome():
     
     browser_type, _ = get_browser_type()
 
-    # Get latest version details
-    latest_version = get_latest_stable_version()
+    try:
+        latest_version = get_latest_stable_version()
+        latest_version_data = get_version_data(latest_version)
+    except RequestException as exc:
+        cached_version = get_cached_chrome_version(main_directory)
+        if cached_version is None:
+            raise RuntimeError(
+                "Could not check Chrome for updates, and no usable cached Chrome/ChromeDriver "
+                "pair is available. Check your internet connection or HTTPS proxy settings."
+            ) from exc
+        print(
+            f"Could not check Chrome for updates ({exc}). "
+            f"Using cached Chrome and ChromeDriver {cached_version}."
+        )
+        return cached_version
+
+    if latest_version_data is None:
+        raise RuntimeError(
+            f"Chrome download metadata did not contain stable version {latest_version}."
+        )
+
     platform_key = get_platform()
-    latest_version_data = get_version_data(latest_version)
 
     # Create Chrome directory if it doesn't exist
     create_chrome_directory(main_directory)
@@ -667,7 +712,7 @@ def checkChrome():
     # Check if the latest versions of Chrome and Chromedriver are already downloaded
     if is_chrome_up_to_date(main_directory, latest_version) and is_chromedriver_up_to_date(main_directory, latest_version):
         # Chrome and Chromedriver are already up to date
-        return
+        return latest_version
 
     # Get the Chrome download URL for the relevant platform
     chrome_download_url = None
@@ -703,3 +748,5 @@ def checkChrome():
     
     # Clear the Chromedriver cache after downloading the new version of Chrome
     clear_selenium_manager_cache()
+
+    return latest_version
